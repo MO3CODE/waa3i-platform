@@ -1,0 +1,278 @@
+/* ============================================================
+   src/styles/global.css
+   Design tokens, resets, animations — imported once in index.js
+   ============================================================ */
+
+/* ── Google Font ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap');
+
+/* ── Design Tokens ───────────────────────────────────────── */
+:root {
+  /* backgrounds */
+  --bg:         #080E14;
+  --bg-2:       #0C1420;
+  --bg-3:       #111C2A;
+
+  /* surfaces (glass cards) */
+  --surface:    rgba(255, 255, 255, 0.04);
+  --surface-2:  rgba(255, 255, 255, 0.07);
+
+  /* borders */
+  --border:     rgba(255, 255, 255, 0.08);
+  --border-2:   rgba(255, 255, 255, 0.14);
+
+  /* gold accent */
+  --gold:       #C9A84C;
+  --gold-2:     #E8C96A;
+  --gold-bg:    rgba(201, 168, 76, 0.12);
+  --gold-border:rgba(201, 168, 76, 0.25);
+
+  /* text */
+  --text:       #EEF0F4;
+  --text-2:     rgba(238, 240, 244, 0.60);
+  --text-3:     rgba(238, 240, 244, 0.35);
+
+  /* semantic */
+  --success:    #27AE60;
+  --error:      #E74C3C;
+  --info:       #3A8BC0;
+  --warning:    #E67E22;
+
+  /* layout */
+  --radius:     16px;
+  --radius-sm:  10px;
+  --radius-lg:  20px;
+  --shadow:     0 8px 32px rgba(0, 0, 0, 0.40);
+  --shadow-sm:  0 2px 12px rgba(0, 0, 0, 0.30);
+
+  /* typography */
+  --font:       'Tajawal', 'Segoe UI', sans-serif;
+
+  /* transition */
+  --ease:       cubic-bezier(0.4, 0, 0.2, 1);
+  --duration:   0.25s;
+}
+
+/* ── Reset ───────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  direction: rtl;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg-2); }
+::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+/* ── Selection ───────────────────────────────────────────── */
+::selection {
+  background: rgba(201, 168, 76, 0.25);
+  color: var(--gold-2);
+}
+
+/* ── Animations ──────────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(32px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px);  }
+  50%       { transform: translateY(-8px); }
+}
+
+@keyframes pulseRing {
+  0%   { transform: scale(1);   opacity: 0.5; }
+  100% { transform: scale(1.7); opacity: 0;   }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 16px rgba(201,168,76,0.3); }
+  50%       { box-shadow: 0 0 36px rgba(201,168,76,0.6); }
+}
+
+/* ── Animation utility classes ───────────────────────────── */
+.anim-fade-up   { animation: fadeUp       0.50s var(--ease) both; }
+.anim-fade-in   { animation: fadeIn       0.35s ease         both; }
+.anim-slide-in  { animation: slideInRight 0.35s var(--ease)  both; }
+.anim-float     { animation: float        3s ease-in-out infinite; }
+.anim-glow      { animation: glow         2s ease-in-out infinite; }
+
+/* stagger helpers */
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.10s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.20s; }
+.delay-5 { animation-delay: 0.25s; }
+.delay-6 { animation-delay: 0.30s; }
+
+/* ── Layout helpers ──────────────────────────────────────── */
+.flex        { display: flex; }
+.flex-col    { display: flex; flex-direction: column; }
+.items-center{ align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-8       { gap: 8px; }
+.gap-12      { gap: 12px; }
+.gap-16      { gap: 16px; }
+.flex-1      { flex: 1; }
+.w-full      { width: 100%; }
+.text-center { text-align: center; }
+
+/* ── Grid helpers ────────────────────────────────────────── */
+.grid-auto-300 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.grid-auto-250 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+/* ── Typography helpers ──────────────────────────────────── */
+.text-gold   { color: var(--gold); }
+.text-muted  { color: var(--text-2); }
+.text-faint  { color: var(--text-3); }
+.text-success{ color: var(--success); }
+.text-error  { color: var(--error); }
+.font-bold   { font-weight: 700; }
+.font-black  { font-weight: 900; }
+
+/* ── Background helpers ──────────────────────────────────── */
+.bg-surface  { background: var(--surface); }
+.bg-surface2 { background: var(--surface-2); }
+.bg-page     { background: var(--bg); }
+.bg-page2    { background: var(--bg-2); }
+
+/* ── Border helpers ──────────────────────────────────────── */
+.border-subtle { border: 1px solid var(--border); }
+.rounded       { border-radius: var(--radius); }
+.rounded-sm    { border-radius: var(--radius-sm); }
+.rounded-lg    { border-radius: var(--radius-lg); }
+.rounded-full  { border-radius: 9999px; }
+
+/* ── Glass card (reusable CSS class) ─────────────────────── */
+.glass {
+  background:    var(--surface);
+  border:        1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  transition:    background var(--duration) var(--ease),
+                 border-color var(--duration) var(--ease),
+                 transform    var(--duration) var(--ease),
+                 box-shadow   var(--duration) var(--ease);
+}
+
+.glass:hover {
+  background:   var(--surface-2);
+  border-color: var(--border-2);
+  transform:    translateY(-2px);
+  box-shadow:   0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.glass-static {
+  background:    var(--surface);
+  border:        1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+}
+
+/* ── Form elements ───────────────────────────────────────── */
+.input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  outline: none;
+  transition: border-color var(--duration);
+  box-sizing: border-box;
+}
+
+.input::placeholder { color: var(--text-3); }
+
+.input:focus {
+  border-color: var(--gold);
+}
+
+.textarea {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  transition: border-color var(--duration);
+  box-sizing: border-box;
+}
+
+.textarea:focus { border-color: var(--gold); }
+
+.select {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  font-size: 14px;
+  font-family: var(--font);
+  color: var(--text);
+  outline: none;
+  cursor: pointer;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+}
+
+@media (min-width: 769px) {
+  .hide-desktop { display: none !important; }
+}
