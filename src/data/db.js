@@ -1,264 +1,260 @@
 // ============================================================
 // src/data/db.js
-// All data storage and retrieval — localStorage-backed
-// Replace methods here to connect a real backend (Firebase etc.)
+// Firebase Firestore + Authentication
+// يحل محل localStorage — بيانات حقيقية مشتركة بين جميع المستخدمين
 // ============================================================
+
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import {
+  getFirestore,
+  doc, getDoc, setDoc, updateDoc, deleteDoc,
+  collection, getDocs, addDoc, query, where,
+  serverTimestamp, arrayUnion,
+} from "firebase/firestore";
 
 import { COURSES } from "./courses";
 
-const DB_KEY = "waa3i_v6";
-
-// ── Seed data (initial state on first run) ─────────────────
-const SEED = {
-  users: [
-    {
-      id:        "admin_1",
-      role:      "admin",
-      name:      "المشرف العام",
-      email:     "admin@waa3i.org",
-      password:  "admin123",      // ⚠️ change before production
-      approved:  true,
-      createdAt: "2024-01-01",
-      avatar:    "م",
-    },
-  ],
-  courses:      COURSES,
-  quizzes: [
-    {
-      id:        "quiz_iman_1",
-      courseId:  "iman",
-      title:     "اختبار مادة الإيمان",
-      timeLimit: 600,
-      passMark:  60,
-      questions: [
-        { id:"q1", text:"كم عدد أركان الإيمان؟",           options:["أربعة","خمسة","ستة","سبعة"],                                                             correct:2 },
-        { id:"q2", text:"الإيمان بالله يشمل؟",             options:["وجوده فقط","وجوده وربوبيته وألوهيته وأسمائه وصفاته","أسماؤه فقط","وجوده وملائكته فقط"], correct:1 },
-        { id:"q3", text:"من هو أول الأنبياء؟",             options:["نوح ﷺ","إبراهيم ﷺ","آدم ﷺ","موسى ﷺ"],                                                    correct:2 },
-        { id:"q4", text:"الإيمان باليوم الآخر يشمل؟",     options:["الموت فقط","البعث والحساب والجنة والنار","الجنة فقط","الحساب فقط"],                       correct:1 },
-        { id:"q5", text:"ما معنى الإيمان بالقدر؟",        options:["التصديق بأن كل شيء بقدر الله","الأقدار السعيدة فقط","أن الإنسان مسيّر","عدم الاجتهاد"], correct:0 },
-      ],
-    },
-  ],
-  progress:      {},
-  quizResults:   [],
-  certificates:  [],
-  notifications: [
-    {
-      id:         "n0",
-      title:      "مرحباً بكم في منصة وعي 🌿",
-      body:       "نرحب بكم في مبادرة وعي بما لا يسع المسلم جهله. ابدأوا رحلتكم التعليمية اليوم.",
-      type:       "info",
-      targetRole: "all",
-      createdAt:  new Date().toISOString(),
-      read:       [],
-    },
-  ],
-  liveSessions: [],
+// ── Firebase config ────────────────────────────────────────
+const firebaseConfig = {
+  apiKey:            "AIzaSyCxIRMS_hYLmFfz5iP4bqrJ3vNrsrFZxO0",
+  authDomain:        "waa3i-platform.firebaseapp.com",
+  projectId:         "waa3i-platform",
+  storageBucket:     "waa3i-platform.firebasestorage.app",
+  messagingSenderId: "379402008395",
+  appId:             "1:379402008395:web:a30b6cae47d38d6ef41ace",
 };
 
-// ── Internal helpers ───────────────────────────────────────
-function load() {
+const firebaseApp = initializeApp(firebaseConfig);
+const auth        = getAuth(firebaseApp);
+const db          = getFirestore(firebaseApp);
+
+// ── Helpers ────────────────────────────────────────────────
+const col = (path)     => collection(db, path);
+const ref = (path, id) => doc(db, path, id);
+
+function toISO(ts) {
+  if (!ts) return new Date().toISOString();
+  if (typeof ts === "string") return ts;
+  if (ts.toDate) return ts.toDate().toISOString();
+  return new Date().toISOString();
+}
+
+// ── AUTH ───────────────────────────────────────────────────
+
+export async function register({ name, email, password }) {
   try {
-    const raw = localStorage.getItem(DB_KEY);
-    if (!raw) return JSON.parse(JSON.stringify(SEED));
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const user = {
+      id:        cred.user.uid,
+      role:      "student",
+      name,
+      email,
+      approved:  true,
+      createdAt: new Date().toISOString().split("T")[0],
+      avatar:    name[0],
+    };
+    await setDoc(ref("users", cred.user.uid), user);
+    return { user };
+  } catch (e) {
+    if (e.code === "auth/email-already-in-use") return { error: "البريد الإلكتروني مسجل مسبقاً" };
+    if (e.code === "auth/weak-password")        return { error: "كلمة المرور يجب أن تكون ٦ أحرف على الأقل" };
+    return { error: "حدث خطأ، حاول مجدداً" };
+  }
+}
 
-    const data = JSON.parse(raw);
-    // Back-fill any missing keys (safe migration)
-    if (!data.courses?.length)   data.courses      = COURSES;
-    if (!data.quizzes)           data.quizzes      = SEED.quizzes;
-    if (!data.notifications)     data.notifications= SEED.notifications;
-    if (!data.liveSessions)      data.liveSessions = [];
-    if (!data.certificates)      data.certificates = [];
-    if (!data.quizResults)       data.quizResults  = [];
-    if (!data.progress)          data.progress     = {};
-    if (!data.users?.length)     data.users        = SEED.users;
-    return data;
+export async function login({ email, password }) {
+  try {
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const snap = await getDoc(ref("users", cred.user.uid));
+    if (!snap.exists()) return { error: "المستخدم غير موجود" };
+    const user = snap.data();
+    if (!user.approved) return { error: "حسابك قيد المراجعة" };
+    return { user };
   } catch {
-    return JSON.parse(JSON.stringify(SEED));
+    return { error: "البريد أو كلمة المرور غير صحيحة" };
   }
 }
 
-function save(data) {
-  try { localStorage.setItem(DB_KEY, JSON.stringify(data)); } catch {}
+export async function logout() {
+  await signOut(auth);
 }
 
-// ── Auth ───────────────────────────────────────────────────
-export function register({ name, email, password }) {
-  const data = load();
-  if (data.users.find(u => u.email === email))
-    return { error: "البريد الإلكتروني مسجل مسبقاً" };
+// ── USERS ──────────────────────────────────────────────────
 
-  const user = {
-    id:        "u_" + Date.now(),
-    role:      "student",
-    name,
-    email,
-    password,
-    approved:  true,
-    createdAt: new Date().toISOString().split("T")[0],
-    avatar:    name[0],
-  };
-  data.users.push(user);
-  save(data);
-  return { user };
+export async function getUsers(role) {
+  const snap = role
+    ? await getDocs(query(col("users"), where("role", "==", role)))
+    : await getDocs(col("users"));
+  return snap.docs.map(d => d.data());
 }
 
-export function login({ email, password }) {
-  const user = load().users.find(u => u.email === email && u.password === password);
-  if (!user) return { error: "البريد أو كلمة المرور غير صحيحة" };
-  return { user: { ...user, password: undefined } };
+export async function approveUser(id) {
+  await updateDoc(ref("users", id), { approved: true });
 }
 
-// ── Users (admin) ──────────────────────────────────────────
-export function getUsers(role) {
-  const data = load();
-  return role ? data.users.filter(u => u.role === role) : data.users;
+export async function rejectUser(id) {
+  await deleteDoc(ref("users", id));
 }
 
-export function approveUser(id) {
-  const data = load();
-  const u = data.users.find(u => u.id === id);
-  if (u) { u.approved = true; save(data); }
+// ── COURSES ────────────────────────────────────────────────
+export function getCourses() { return COURSES; }
+
+// ── PROGRESS ───────────────────────────────────────────────
+
+export async function getProgress(userId) {
+  const snap = await getDoc(ref("progress", userId));
+  return snap.exists() ? snap.data() : {};
 }
 
-export function rejectUser(id) {
-  const data = load();
-  data.users = data.users.filter(u => u.id !== id);
-  save(data);
+export async function getAllProgress() {
+  const snap = await getDocs(col("progress"));
+  const out = {};
+  snap.docs.forEach(d => { out[d.id] = d.data(); });
+  return out;
 }
 
-// ── Courses ────────────────────────────────────────────────
-export function getCourses() { return load().courses; }
-
-// ── Progress ───────────────────────────────────────────────
-// progress[userId][courseId][lectureIndex] = watchedPercent (0–100)
-// A lecture is "complete" when watchedPercent >= 80
-
-export function getProgress(userId) {
-  return load().progress[userId] || {};
+export async function setLectureProgress(userId, courseId, lectureIdx, pct) {
+  const snap = await getDoc(ref("progress", userId));
+  const data = snap.exists() ? snap.data() : {};
+  if (pct <= (data[courseId]?.[lectureIdx] || 0)) return;
+  await setDoc(ref("progress", userId), {
+    ...data,
+    [courseId]: { ...(data[courseId] || {}), [lectureIdx]: pct },
+  });
 }
 
-export function getAllProgress() {
-  return load().progress;
+// ── QUIZZES ────────────────────────────────────────────────
+
+export async function getQuizzes() {
+  const snap = await getDocs(col("quizzes"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-export function setLectureProgress(userId, courseId, lectureIdx, pct) {
-  const data = load();
-  if (!data.progress[userId])          data.progress[userId]          = {};
-  if (!data.progress[userId][courseId]) data.progress[userId][courseId] = {};
-  // Only update if the new percentage is higher (never go backwards)
-  const current = data.progress[userId][courseId][lectureIdx] || 0;
-  if (pct > current) {
-    data.progress[userId][courseId][lectureIdx] = pct;
-    save(data);
+export async function getQuizByCourse(courseId) {
+  const snap = await getDocs(query(col("quizzes"), where("courseId", "==", courseId)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() };
+}
+
+export async function saveQuiz(quiz) {
+  const { id, ...data } = quiz;
+  if (id && !id.startsWith("qz_")) {
+    await setDoc(ref("quizzes", id), data);
+  } else {
+    await addDoc(col("quizzes"), data);
   }
 }
 
-// ── Quizzes ────────────────────────────────────────────────
-export function getQuizzes()           { return load().quizzes; }
-export function getQuizByCourse(cid)   { return load().quizzes.find(q => q.courseId === cid) || null; }
-
-export function saveQuiz(quiz) {
-  const data = load();
-  const idx  = data.quizzes.findIndex(q => q.id === quiz.id);
-  if (idx >= 0) data.quizzes[idx] = quiz;
-  else          data.quizzes.push({ ...quiz, id: "qz_" + Date.now() });
-  save(data);
+export async function deleteQuiz(id) {
+  await deleteDoc(ref("quizzes", id));
 }
 
-export function deleteQuiz(id) {
-  const data = load();
-  data.quizzes = data.quizzes.filter(q => q.id !== id);
-  save(data);
+// ── QUIZ RESULTS ───────────────────────────────────────────
+
+export async function saveQuizResult(result) {
+  await addDoc(col("quizResults"), { ...result, date: serverTimestamp() });
 }
 
-// ── Quiz Results ───────────────────────────────────────────
-export function saveQuizResult(result) {
-  const data = load();
-  data.quizResults.push({ ...result, id: "qr_" + Date.now(), date: new Date().toISOString() });
-  save(data);
+export async function getQuizResults(userId) {
+  const snap = userId
+    ? await getDocs(query(col("quizResults"), where("userId", "==", userId)))
+    : await getDocs(col("quizResults"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data(), date: toISO(d.data().date) }));
 }
 
-export function getQuizResults(userId) {
-  const data = load();
-  return userId ? data.quizResults.filter(r => r.userId === userId) : data.quizResults;
+export async function getUserQuizResult(userId, quizId) {
+  const snap = await getDocs(
+    query(col("quizResults"), where("userId", "==", userId), where("quizId", "==", quizId))
+  );
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data(), date: toISO(d.data().date) };
 }
 
-export function getUserQuizResult(userId, quizId) {
-  return load().quizResults.find(r => r.userId === userId && r.quizId === quizId) || null;
+// ── CERTIFICATES ───────────────────────────────────────────
+
+export async function issueCertificate({ userId, userName, issuedBy }) {
+  const docRef = await addDoc(col("certificates"), {
+    userId, userName, issuedBy, issuedAt: serverTimestamp(),
+  });
+  return { id: docRef.id, userId, userName, issuedBy, issuedAt: new Date().toISOString() };
 }
 
-// ── Certificates ───────────────────────────────────────────
-export function issueCertificate({ userId, userName, issuedBy }) {
-  const data = load();
-  const cert = { id: "cert_" + Date.now(), userId, userName, issuedBy, issuedAt: new Date().toISOString() };
-  data.certificates.push(cert);
-  save(data);
-  return cert;
+export async function getCertificates(userId) {
+  const snap = userId
+    ? await getDocs(query(col("certificates"), where("userId", "==", userId)))
+    : await getDocs(col("certificates"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data(), issuedAt: toISO(d.data().issuedAt) }));
 }
 
-export function getCertificates(userId) {
-  const data = load();
-  return userId ? data.certificates.filter(c => c.userId === userId) : data.certificates;
+export async function getUserCertificate(userId) {
+  const snap = await getDocs(query(col("certificates"), where("userId", "==", userId)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data(), issuedAt: toISO(d.data().issuedAt) };
 }
 
-export function getUserCertificate(userId) {
-  return load().certificates.find(c => c.userId === userId) || null;
+// ── NOTIFICATIONS ──────────────────────────────────────────
+
+export async function getNotifications(role) {
+  const snap = await getDocs(col("notifications"));
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) }))
+    .filter(n => n.targetRole === "all" || n.targetRole === role)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-// ── Notifications ──────────────────────────────────────────
-export function getNotifications(role) {
-  return load().notifications.filter(n => n.targetRole === "all" || n.targetRole === role);
+export async function addNotification(notif) {
+  await addDoc(col("notifications"), { ...notif, createdAt: serverTimestamp(), read: [] });
 }
 
-export function addNotification(notif) {
-  const data = load();
-  data.notifications.unshift({ ...notif, id: "n_" + Date.now(), createdAt: new Date().toISOString(), read: [] });
-  save(data);
+export async function markNotifRead(notifId, userId) {
+  await updateDoc(ref("notifications", notifId), { read: arrayUnion(userId) });
 }
 
-export function markNotifRead(notifId, userId) {
-  const data = load();
-  const n = data.notifications.find(n => n.id === notifId);
-  if (n && !n.read.includes(userId)) { n.read.push(userId); save(data); }
+export async function deleteNotification(id) {
+  await deleteDoc(ref("notifications", id));
 }
 
-export function deleteNotification(id) {
-  const data = load();
-  data.notifications = data.notifications.filter(n => n.id !== id);
-  save(data);
+// ── LIVE SESSIONS ──────────────────────────────────────────
+
+export async function getLiveSessions() {
+  const snap = await getDocs(col("liveSessions"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-// ── Live Sessions ──────────────────────────────────────────
-export function getLiveSessions() { return load().liveSessions; }
-
-export function saveLiveSession(session) {
-  const data = load();
-  const idx  = data.liveSessions.findIndex(s => s.id === session.id);
-  if (idx >= 0) data.liveSessions[idx] = session;
-  else          data.liveSessions.push({ ...session, id: "ls_" + Date.now() });
-  save(data);
+export async function saveLiveSession(session) {
+  const { id, ...data } = session;
+  if (id && !id.startsWith("ls_")) {
+    await setDoc(ref("liveSessions", id), data);
+  } else {
+    await addDoc(col("liveSessions"), data);
+  }
 }
 
-export function deleteLiveSession(id) {
-  const data = load();
-  data.liveSessions = data.liveSessions.filter(s => s.id !== id);
-  save(data);
+export async function deleteLiveSession(id) {
+  await deleteDoc(ref("liveSessions", id));
 }
 
-// ── Notes (timestamped, per user+course+lecture) ───────────
-function notesStorageKey(userId, courseId, lectureIdx) {
-  return `waa3i_notes_${userId}_${courseId}_${lectureIdx}`;
+// ── NOTES — تبقى محلية (ملاحظات شخصية) ───────────────────
+
+function notesKey(userId, courseId, idx) {
+  return `waa3i_notes_${userId}_${courseId}_${idx}`;
 }
 
 export function getNotes(userId, courseId, lectureIdx) {
-  try {
-    return JSON.parse(localStorage.getItem(notesStorageKey(userId, courseId, lectureIdx))) || [];
-  } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(notesKey(userId, courseId, lectureIdx))) || []; }
+  catch { return []; }
 }
 
 export function saveNotes(userId, courseId, lectureIdx, notes) {
-  try {
-    localStorage.setItem(notesStorageKey(userId, courseId, lectureIdx), JSON.stringify(notes));
-  } catch {}
+  try { localStorage.setItem(notesKey(userId, courseId, lectureIdx), JSON.stringify(notes)); }
+  catch {}
 }
