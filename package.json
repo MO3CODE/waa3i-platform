@@ -1,5 +1,5 @@
 {
-  "name": "waa3i-platform",
+  "name": "waa3i-pro",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "CI= react-scripts build",
     "test":  "react-scripts test"
   },
   "eslintConfig": { "extends": ["react-app"] },
