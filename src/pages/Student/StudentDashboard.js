@@ -1,27 +1,63 @@
 // ============================================================
 // src/pages/Student/StudentDashboard.js
 // ============================================================
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { getProgress, getNotifications, getQuizResults, getUserCertificate,
-         getLiveSessions, getQuizByCourse, getUserQuizResult, markNotifRead } from "../../data/db";
+         getLiveSessions, getQuizzes, markNotifRead } from "../../data/db";
 import { toArabic, formatDate, countWatched, coursePct, isCourseComplete, NOTIF_COLOR } from "../../utils/helpers";
 import { Ring, Btn, Glass, Pill, ProgressBar, SectionHeader } from "../../components/ui";
 import { Sidebar } from "../../components/layout/Sidebar";
 
 export default function StudentDashboard({ user, courses, onSelectCourse, onLogout }) {
-  const [tab,  setTab]  = useState("courses");
-  const [tick, setTick] = useState(0);
+  const [tab,      setTab]      = useState("courses");
+  const [progress, setProgress] = useState({});
+  const [notifs,   setNotifs]   = useState([]);
+  const [qResults, setQResults] = useState([]);
+  const [cert,     setCert]     = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [quizzes,  setQuizzes]  = useState([]);
+  const [loading,  setLoading]  = useState(true);
 
-  const progress  = getProgress(user.id);
-  const notifs    = getNotifications(user.role);
-  const qResults  = getQuizResults(user.id);
-  const cert      = getUserCertificate(user.id);
-  const sessions  = getLiveSessions();
-  const unread    = notifs.filter(n => !n.read.includes(user.id)).length;
+  useEffect(() => {
+    async function load() {
+      const [prog, nfs, qrs, ct, sess, qzs] = await Promise.all([
+        getProgress(user.id),
+        getNotifications(user.role),
+        getQuizResults(user.id),
+        getUserCertificate(user.id),
+        getLiveSessions(),
+        getQuizzes(),
+      ]);
+      setProgress(prog);
+      setNotifs(nfs);
+      setQResults(qrs);
+      setCert(ct);
+      setSessions(sess);
+      setQuizzes(qzs);
+      setLoading(false);
+    }
+    load();
+  }, [user.id, user.role]);
 
+  function getQuizForCourse(courseId) {
+    return quizzes.find(q => q.courseId === courseId) || null;
+  }
+
+  function getResultForQuiz(quizId) {
+    return qResults.find(r => r.quizId === quizId) || null;
+  }
+
+  async function handleMarkRead(notifId) {
+    await markNotifRead(notifId, user.id);
+    setNotifs(prev => prev.map(n =>
+      n.id === notifId ? { ...n, read: [...(n.read || []), user.id] } : n
+    ));
+  }
+
+  const unread    = notifs.filter(n => !(n.read || []).includes(user.id)).length;
   const totalL    = courses.reduce((s, c) => s + c.lectures, 0);
   const totalW    = courses.reduce((s, c) => s + countWatched(progress[c.id] || {}), 0);
-  const overall   = Math.round((totalW / totalL) * 100);
+  const overall   = totalL > 0 ? Math.round((totalW / totalL) * 100) : 0;
   const doneCount = courses.filter(c => isCourseComplete(progress[c.id] || {}, c.lectures)).length;
 
   const NAV_ITEMS = [
@@ -34,7 +70,6 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
 
   return (
     <div className="student-layout">
-      {/* ── Sidebar ── */}
       <Sidebar
         user={user}
         activeTab={tab}
@@ -68,11 +103,17 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         }
       />
 
-      {/* ── Page content ── */}
       <main className="page-content">
 
+        {loading && (
+          <div style={{ textAlign: "center", padding: 80, color: "var(--text-3)" }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+            <div>جاري تحميل البيانات...</div>
+          </div>
+        )}
+
         {/* COURSES */}
-        {tab === "courses" && (
+        {!loading && tab === "courses" && (
           <div className="anim-fade-in">
             <SectionHeader
               title="المواد الدراسية"
@@ -84,8 +125,8 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                 const p    = coursePct(cp, course.lectures);
                 const done = isCourseComplete(cp, course.lectures);
                 const prev = idx === 0 || isCourseComplete(progress[courses[idx - 1].id] || {}, courses[idx - 1].lectures);
-                const quiz = getQuizByCourse(course.id);
-                const qr   = quiz ? getUserQuizResult(user.id, quiz.id) : null;
+                const quiz = getQuizForCourse(course.id);
+                const qr   = quiz ? getResultForQuiz(quiz.id) : null;
 
                 return (
                   <div
@@ -106,7 +147,6 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                       e.currentTarget.style.boxShadow   = "";
                     }}
                   >
-                    {/* Accent glow */}
                     <div className="course-card-accent-glow" style={{ background: course.accent }} />
 
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
@@ -143,12 +183,12 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         )}
 
         {/* NOTIFICATIONS */}
-        {tab === "notifs" && (
+        {!loading && tab === "notifs" && (
           <div className="anim-fade-in">
             <SectionHeader title="الإشعارات" />
             {notifs.length === 0 && <p style={{ color: "var(--text-3)" }}>لا توجد إشعارات</p>}
             {notifs.map(n => {
-              const isRead = n.read.includes(user.id);
+              const isRead = (n.read || []).includes(user.id);
               return (
                 <Glass
                   key={n.id}
@@ -156,7 +196,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                     padding: "16px 20px", marginBottom: 12,
                     borderRight: `3px solid ${isRead ? "var(--border)" : (NOTIF_COLOR[n.type] || "var(--gold)")}`,
                   }}
-                  onClick={() => { markNotifRead(n.id, user.id); setTick(t => t + 1); }}
+                  onClick={() => handleMarkRead(n.id)}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <strong style={{ color: "var(--text)", fontSize: 14 }}>{n.title}</strong>
@@ -171,7 +211,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         )}
 
         {/* LIVE SESSIONS */}
-        {tab === "live" && (
+        {!loading && tab === "live" && (
           <div className="anim-fade-in">
             <SectionHeader title="اللقاءات المباشرة" />
             {sessions.length === 0 && (
@@ -205,7 +245,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         )}
 
         {/* RESULTS */}
-        {tab === "results" && (
+        {!loading && tab === "results" && (
           <div className="anim-fade-in">
             <SectionHeader title="نتائج الاختبارات" />
             {qResults.length === 0 && (
@@ -238,7 +278,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         )}
 
         {/* CERTIFICATE */}
-        {tab === "cert" && (
+        {!loading && tab === "cert" && (
           <div className="anim-fade-in">
             <SectionHeader title="الشهادة" />
             {cert ? (
@@ -262,8 +302,8 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 440, margin: "0 auto" }}>
                   {courses.map(c => {
                     const done = isCourseComplete(progress[c.id] || {}, c.lectures);
-                    const quiz = getQuizByCourse(c.id);
-                    const qr   = quiz ? getUserQuizResult(user.id, quiz.id) : null;
+                    const quiz = getQuizForCourse(c.id);
+                    const qr   = quiz ? getResultForQuiz(quiz.id) : null;
                     return (
                       <div key={c.id} style={{
                         background: "var(--surface)", border: `1px solid ${done ? `${c.accent}33` : "var(--border)"}`,
