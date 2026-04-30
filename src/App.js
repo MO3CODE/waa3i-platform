@@ -2,8 +2,8 @@
 // src/App.js
 // Root component — handles screen routing only
 // ============================================================
-import React, { useState } from "react";
-import { getCourses } from "./data/db";
+import React, { useState, useEffect } from "react";
+import { getCourses, seedAdminUser } from "./data/db";
 
 import Landing         from "./pages/Landing/Landing";
 import Auth            from "./pages/Auth/Auth";
@@ -25,6 +25,8 @@ export default function App() {
   const [activeCourse, setActiveCourse] = useState(null);
 
   const courses = getCourses();
+
+  useEffect(() => { seedAdminUser(); }, []);
 
   function handleLogin(loggedInUser) {
     setUser(loggedInUser);

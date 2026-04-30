@@ -68,6 +68,28 @@ export async function register({ name, email, password }) {
   }
 }
 
+export async function seedAdminUser() {
+  const ADMIN_EMAIL    = "admin@waa3i.org";
+  const ADMIN_PASSWORD = "admin123";
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+    await setDoc(ref("users", cred.user.uid), {
+      id:        cred.user.uid,
+      role:      "admin",
+      name:      "المدير",
+      email:     ADMIN_EMAIL,
+      approved:  true,
+      createdAt: new Date().toISOString().split("T")[0],
+      avatar:    "م",
+    });
+  } catch (e) {
+    // auth/email-already-in-use means admin already exists — that's fine
+    if (e.code !== "auth/email-already-in-use") {
+      console.warn("seedAdminUser:", e.message);
+    }
+  }
+}
+
 export async function login({ email, password }) {
   try {
     const cred = await signInWithEmailAndPassword(auth, email, password);
