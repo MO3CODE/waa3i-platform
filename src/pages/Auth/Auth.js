@@ -14,26 +14,28 @@ export default function Auth({ onLogin, onBack }) {
 
   const set = key => value => setForm(p => ({ ...p, [key]: value }));
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setError("");
     setLoading(true);
-    setTimeout(() => {
+    try {
       if (mode === "login") {
-        const res = login({ email: form.email, password: form.password });
+        const res = await login({ email: form.email, password: form.password });
         if (res.error) setError(res.error);
         else onLogin(res.user);
       } else {
         if (!form.name || !form.email || !form.password) {
           setError("يرجى ملء جميع الحقول");
-          setLoading(false);
           return;
         }
-        const res = register(form);
+        const res = await register(form);
         if (res.error) setError(res.error);
         else onLogin(res.user);
       }
+    } catch {
+      setError("حدث خطأ، حاول مجدداً");
+    } finally {
       setLoading(false);
-    }, 450);
+    }
   }
 
   function handleKeyDown(e) {
