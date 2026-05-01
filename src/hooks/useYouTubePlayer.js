@@ -1,7 +1,5 @@
 // ============================================================
 // src/hooks/useYouTubePlayer.js
-// YouTube IFrame API — playlist player
-// Player is created once; lecture changes use playVideoAt()
 // ============================================================
 import { useRef, useEffect, useCallback } from "react";
 
@@ -15,35 +13,41 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
 
   cbRef.current = callbacks;
 
-  // ── Create player ───────────────────────────────────────────
   function createPlayer() {
     const container = document.getElementById(containerId);
     if (!container || playerRef.current) return;
 
-    container.innerHTML = '<div id="yt-iframe-inner"></div>';
+    // Build a styled iframe manually so it fills the container
+    const iframeId = "yt-player-iframe";
+    container.innerHTML = "";
 
-    playerRef.current = new window.YT.Player("yt-iframe-inner", {
-      width:  "100%",
-      height: "100%",
-      playerVars: {
-        listType:        "playlist",
-        list:            playlistId,
-        index:           pendingIdx.current - 1,   // 0-based
-        rel:             0,
-        modestbranding:  1,
-        iv_load_policy:  3,
-        playsinline:     1,
-      },
+    const iframe           = document.createElement("iframe");
+    iframe.id              = iframeId;
+    iframe.style.cssText   = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
+    iframe.allow           = "autoplay; encrypted-media; fullscreen";
+    iframe.allowFullscreen = true;
+    iframe.src = [
+      "https://www.youtube.com/embed/videoseries",
+      `?list=${playlistId}`,
+      "&index=0",
+      "&enablejsapi=1",
+      `&origin=${encodeURIComponent(window.location.origin)}`,
+      "&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1",
+    ].join("");
+    container.appendChild(iframe);
+
+    // Bind YT.Player to the existing iframe
+    playerRef.current = new window.YT.Player(iframeId, {
       events: {
-        onReady: () => {
+        onReady: e => {
           readyRef.current = true;
-          // Navigate to correct index if it changed before ready
+          // Navigate to the correct lecture
           if (pendingIdx.current > 1) {
-            try { playerRef.current.playVideoAt(pendingIdx.current - 1); } catch {}
+            try { e.target.playVideoAt(pendingIdx.current - 1); } catch {}
           }
         },
         onStateChange: event => {
-          if (event.data === 1) {   // PLAYING
+          if (event.data === 1) {       // PLAYING
             clearInterval(intervalRef.current);
             intervalRef.current = setInterval(() => {
               try {
@@ -51,40 +55,35 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
                 const tot = event.target.getDuration();
                 if (tot > 0) {
                   watchedRef.current += 1;
-                  const posPct     = Math.round((cur / tot) * 100);
-                  const watchedPct = Math.round((watchedRef.current / tot) * 100);
-                  const effective  = Math.min(posPct, watchedPct, 100);
-                  cbRef.current?.onProgress?.(effective);
+                  const posPct    = Math.round((cur / tot) * 100);
+                  const watchPct  = Math.round((watchedRef.current / tot) * 100);
+                  cbRef.current?.onProgress?.(Math.min(posPct, watchPct, 100));
                 }
               } catch {}
             }, 1000);
           } else {
             clearInterval(intervalRef.current);
-            if (event.data === 0) cbRef.current?.onEnded?.();   // ENDED
+            if (event.data === 0) cbRef.current?.onEnded?.(); // ENDED
           }
         },
       },
     });
-
-    // Expose player globally for getCurrentTime hack in CourseView
-    window._ytplayer = playerRef.current;
   }
 
-  // ── Load API once ────────────────────────────────────────────
+  // Load YouTube API script once
   useEffect(() => {
+    if (!playlistId) return;
+
     if (window.YT?.Player) {
-      setTimeout(createPlayer, 100);
+      createPlayer();
     } else {
       if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        const tag = document.createElement("script");
-        tag.src   = "https://www.youtube.com/iframe_api";
-        document.head.appendChild(tag);
+        const s = document.createElement("script");
+        s.src   = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(s);
       }
       const prev = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => {
-        prev?.();
-        createPlayer();
-      };
+      window.onYouTubeIframeAPIReady = () => { prev?.(); createPlayer(); };
     }
 
     return () => {
@@ -92,20 +91,16 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
       try { playerRef.current?.destroy(); } catch {}
       playerRef.current = null;
       readyRef.current  = false;
-      window._ytplayer  = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Navigate on lecture change ────────────────────────────────
+  // Navigate to correct lecture when videoIndex changes
   useEffect(() => {
-    pendingIdx.current  = videoIndex;
-    watchedRef.current  = 0;
+    pendingIdx.current = videoIndex;
+    watchedRef.current = 0;
 
-    if (readyRef.current && playerRef.current) {
-      try {
-        playerRef.current.playVideoAt(videoIndex - 1);  // 0-based
-      } catch {}
-    }
+    if (!readyRef.current || !playerRef.current) return;
+    try { playerRef.current.playVideoAt(videoIndex - 1); } catch {}
   }, [videoIndex]);
 
   const getCurrentTime = useCallback(() => {
