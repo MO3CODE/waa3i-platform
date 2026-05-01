@@ -155,41 +155,45 @@ export async function deleteUser(userId) {
   await deleteDoc(ref("users", userId));
 }
 
-// ── COURSES (Firestore, with static fallback) ──────────────
+// ── COURSES
+// Static courses are always the base.
+// Firestore overrides are merged on top (for admin edits).
+// This means courses never disappear even if Firestore is empty/partial.
 
 export async function getCourses() {
+  const base = STATIC_COURSES.map(c => ({
+    ...c,
+    lectureCount: c.lectures,
+    isActive: true,
+  }));
+
   try {
     const snap = await getDocs(col("courses"));
-    if (snap.empty) {
-      // Seed in background, return static immediately
-      seedCoursesIfEmpty();
-      return STATIC_COURSES.map(c => ({
-        ...c,
-        lectureCount: c.lectures,
-        isActive: true,
-      }));
-    }
-    const courses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return courses.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    if (snap.empty) return base;
+
+    const firestoreMap = {};
+    snap.docs.forEach(d => { firestoreMap[d.id] = { id: d.id, ...d.data() }; });
+
+    // Merge: static base + any Firestore overrides, then add Firestore-only courses
+    const merged = base.map(c => firestoreMap[c.id] ? { ...c, ...firestoreMap[c.id] } : c);
+    Object.values(firestoreMap).forEach(fc => {
+      if (!base.find(c => c.id === fc.id)) merged.push(fc);
+    });
+
+    return merged.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   } catch {
-    // On any Firestore error, fall back to static data
-    return STATIC_COURSES.map(c => ({
-      ...c,
-      lectureCount: c.lectures,
-      isActive: true,
-    }));
+    return base;
   }
 }
 
 export async function getCourse(courseId) {
+  const staticCourse = STATIC_COURSES.find(c => c.id === courseId);
+  const base = staticCourse ? { ...staticCourse, lectureCount: staticCourse.lectures, isActive: true } : null;
   try {
     const snap = await getDoc(ref("courses", courseId));
-    if (snap.exists()) return { id: snap.id, ...snap.data() };
+    if (snap.exists()) return base ? { ...base, ...snap.data(), id: courseId } : { id: snap.id, ...snap.data() };
   } catch {}
-  // Fallback to static data
-  const s = STATIC_COURSES.find(c => c.id === courseId);
-  if (!s) return null;
-  return { ...s, lectureCount: s.lectures, isActive: true };
+  return base;
 }
 
 export async function saveCourse(course) {
@@ -211,37 +215,36 @@ export async function deleteCourse(courseId) {
 
 // ── LECTURES ───────────────────────────────────────────────
 
+function staticLectures(courseId) {
+  const c = STATIC_COURSES.find(x => x.id === courseId);
+  if (!c) return [];
+  return Array.from({ length: c.lectures }, (_, i) => ({
+    id:            `${courseId}_${i}`,
+    courseId,
+    title:         `محاضرة ${i + 1}`,
+    playlistIndex: i + 1,
+    order:         i,
+    isActive:      true,
+  }));
+}
+
 export async function getLectures(courseId) {
   try {
     const snap = await getDocs(
       query(col("lectures"), where("courseId", "==", courseId))
     );
-    if (snap.empty) {
-      // Return placeholder lectures based on static course data
-      const staticCourse = STATIC_COURSES.find(c => c.id === courseId);
-      if (!staticCourse) return [];
-      return Array.from({ length: staticCourse.lectures }, (_, i) => ({
-        id:            `${courseId}_${i}`,
-        courseId,
-        title:         `محاضرة ${i + 1}`,
-        playlistIndex: i + 1,
-        order:         i,
-        isActive:      true,
-      }));
-    }
+    if (snap.empty) return staticLectures(courseId);
+
     const lectures = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    return lectures.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const sorted   = lectures.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    // If Firestore has fewer lectures than expected, fall back to static
+    const staticC = STATIC_COURSES.find(c => c.id === courseId);
+    if (staticC && sorted.length < staticC.lectures) return staticLectures(courseId);
+
+    return sorted;
   } catch {
-    const staticCourse = STATIC_COURSES.find(c => c.id === courseId);
-    if (!staticCourse) return [];
-    return Array.from({ length: staticCourse.lectures }, (_, i) => ({
-      id:            `${courseId}_${i}`,
-      courseId,
-      title:         `محاضرة ${i + 1}`,
-      playlistIndex: i + 1,
-      order:         i,
-      isActive:      true,
-    }));
+    return staticLectures(courseId);
   }
 }
 
