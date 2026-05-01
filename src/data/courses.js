@@ -15,7 +15,7 @@ export const COURSES = [
     color:       "#2E7D52",
     accent:      "#3DAA6E",
     icon:        "✦",
-    playlistId:  "PLU337kS0Vsa1_X9E5QozMdmqFGp3G8ajl",
+    playlistId:  "PLU337kS0Vsa3jWYV82_H6lFRA9lb9rRRX",
     order:       0,
     desc:        "أسس العقيدة الإسلامية وأركان الإيمان الستة",
   },
