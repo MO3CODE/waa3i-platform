@@ -16,35 +16,28 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
   function createPlayer() {
     const container = document.getElementById(containerId);
     if (!container || playerRef.current) return;
-
-    // Build a styled iframe manually so it fills the container
-    const iframeId = "yt-player-iframe";
     container.innerHTML = "";
 
-    const iframe           = document.createElement("iframe");
-    iframe.id              = iframeId;
-    iframe.style.cssText   = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
-    iframe.allow           = "autoplay; encrypted-media; fullscreen";
-    iframe.allowFullscreen = true;
-    iframe.src = [
-      "https://www.youtube.com/embed/videoseries",
-      `?list=${playlistId}`,
-      "&index=0",
-      "&enablejsapi=1",
-      `&origin=${encodeURIComponent(window.location.origin)}`,
-      "&rel=0&modestbranding=1&iv_load_policy=3&playsinline=1",
-    ].join("");
-    container.appendChild(iframe);
-
-    // Bind YT.Player to the existing iframe
-    playerRef.current = new window.YT.Player(iframeId, {
+    playerRef.current = new window.YT.Player(containerId, {
+      playerVars: {
+        list:           playlistId,
+        listType:       "playlist",
+        index:          (pendingIdx.current || 1) - 1,
+        enablejsapi:    1,
+        origin:         window.location.origin,
+        rel:            0,
+        modestbranding: 1,
+        iv_load_policy: 3,
+        playsinline:    1,
+      },
       events: {
-        onReady: e => {
+        onReady: () => {
           readyRef.current = true;
-          // Navigate to the correct lecture
-          if (pendingIdx.current > 1) {
-            try { e.target.playVideoAt(pendingIdx.current - 1); } catch {}
-          }
+          // Fix iframe sizing after YT creates it
+          try {
+            const iframe = playerRef.current.getIframe();
+            iframe.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
+          } catch {}
         },
         onStateChange: event => {
           if (event.data === 1) {       // PLAYING
@@ -55,8 +48,8 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
                 const tot = event.target.getDuration();
                 if (tot > 0) {
                   watchedRef.current += 1;
-                  const posPct    = Math.round((cur / tot) * 100);
-                  const watchPct  = Math.round((watchedRef.current / tot) * 100);
+                  const posPct   = Math.round((cur / tot) * 100);
+                  const watchPct = Math.round((watchedRef.current / tot) * 100);
                   cbRef.current?.onProgress?.(Math.min(posPct, watchPct, 100));
                 }
               } catch {}
