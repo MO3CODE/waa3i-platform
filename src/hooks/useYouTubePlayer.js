@@ -22,7 +22,7 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
       playerVars: {
         list:           playlistId,
         listType:       "playlist",
-        index:          (pendingIdx.current || 1) - 1,
+        // No index — let YouTube start from first embeddable video
         enablejsapi:    1,
         origin:         window.location.origin,
         rel:            0,
@@ -33,11 +33,16 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
       events: {
         onReady: () => {
           readyRef.current = true;
-          // Fix iframe sizing after YT creates it
+          // Fix iframe CSS
           try {
-            const iframe = playerRef.current.getIframe();
-            iframe.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
+            const f = playerRef.current.getIframe();
+            if (f) f.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
           } catch {}
+          // Navigate to requested lecture
+          const idx = (pendingIdx.current || 1) - 1;
+          if (idx > 0) {
+            try { playerRef.current.playVideoAt(idx); } catch {}
+          }
         },
         onStateChange: event => {
           if (event.data === 1) {       // PLAYING
@@ -63,7 +68,7 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
     });
   }
 
-  // Load YouTube API script once
+  // Build player once
   useEffect(() => {
     if (!playlistId) return;
 
@@ -87,13 +92,12 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Navigate to correct lecture when videoIndex changes
+  // Navigate when lecture changes
   useEffect(() => {
     pendingIdx.current = videoIndex;
     watchedRef.current = 0;
-
     if (!readyRef.current || !playerRef.current) return;
-    try { playerRef.current.playVideoAt(videoIndex - 1); } catch {}
+    try { playerRef.current.playVideoAt((videoIndex || 1) - 1); } catch {}
   }, [videoIndex]);
 
   const getCurrentTime = useCallback(() => {
