@@ -13,7 +13,7 @@ import {
 import {
   getFirestore,
   doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, getDocs, addDoc, query, where, orderBy,
+  collection, getDocs, addDoc, query, where,
   serverTimestamp, arrayUnion,
 } from "firebase/firestore";
 
@@ -155,18 +155,41 @@ export async function deleteUser(userId) {
   await deleteDoc(ref("users", userId));
 }
 
-// ── COURSES (Firestore) ────────────────────────────────────
+// ── COURSES (Firestore, with static fallback) ──────────────
 
 export async function getCourses() {
-  const snap = await getDocs(query(col("courses"), orderBy("order", "asc")));
-  if (snap.empty) return [];
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  try {
+    const snap = await getDocs(col("courses"));
+    if (snap.empty) {
+      // Seed in background, return static immediately
+      seedCoursesIfEmpty();
+      return STATIC_COURSES.map(c => ({
+        ...c,
+        lectureCount: c.lectures,
+        isActive: true,
+      }));
+    }
+    const courses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return courses.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  } catch {
+    // On any Firestore error, fall back to static data
+    return STATIC_COURSES.map(c => ({
+      ...c,
+      lectureCount: c.lectures,
+      isActive: true,
+    }));
+  }
 }
 
 export async function getCourse(courseId) {
-  const snap = await getDoc(ref("courses", courseId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() };
+  try {
+    const snap = await getDoc(ref("courses", courseId));
+    if (snap.exists()) return { id: snap.id, ...snap.data() };
+  } catch {}
+  // Fallback to static data
+  const s = STATIC_COURSES.find(c => c.id === courseId);
+  if (!s) return null;
+  return { ...s, lectureCount: s.lectures, isActive: true };
 }
 
 export async function saveCourse(course) {
@@ -189,10 +212,37 @@ export async function deleteCourse(courseId) {
 // ── LECTURES ───────────────────────────────────────────────
 
 export async function getLectures(courseId) {
-  const snap = await getDocs(
-    query(col("lectures"), where("courseId", "==", courseId), orderBy("order", "asc"))
-  );
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  try {
+    const snap = await getDocs(
+      query(col("lectures"), where("courseId", "==", courseId))
+    );
+    if (snap.empty) {
+      // Return placeholder lectures based on static course data
+      const staticCourse = STATIC_COURSES.find(c => c.id === courseId);
+      if (!staticCourse) return [];
+      return Array.from({ length: staticCourse.lectures }, (_, i) => ({
+        id:            `${courseId}_${i}`,
+        courseId,
+        title:         `محاضرة ${i + 1}`,
+        playlistIndex: i + 1,
+        order:         i,
+        isActive:      true,
+      }));
+    }
+    const lectures = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return lectures.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  } catch {
+    const staticCourse = STATIC_COURSES.find(c => c.id === courseId);
+    if (!staticCourse) return [];
+    return Array.from({ length: staticCourse.lectures }, (_, i) => ({
+      id:            `${courseId}_${i}`,
+      courseId,
+      title:         `محاضرة ${i + 1}`,
+      playlistIndex: i + 1,
+      order:         i,
+      isActive:      true,
+    }));
+  }
 }
 
 export async function saveLecture(lecture) {
@@ -259,16 +309,20 @@ export async function setLectureProgress(userId, courseId, lectureId, pct) {
 // ── NOTES (Firestore) ──────────────────────────────────────
 
 export async function getNotes(userId, courseId, lectureId) {
-  const snap = await getDocs(
-    query(
-      col("notes"),
-      where("userId",    "==", userId),
-      where("courseId",  "==", courseId),
-      where("lectureId", "==", lectureId),
-      orderBy("timestamp", "asc")
-    )
-  );
-  return snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) }));
+  try {
+    const snap = await getDocs(
+      query(
+        col("notes"),
+        where("userId",    "==", userId),
+        where("courseId",  "==", courseId),
+        where("lectureId", "==", lectureId)
+      )
+    );
+    const notes = snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) }));
+    return notes.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0));
+  } catch {
+    return [];
+  }
 }
 
 export async function addNote({ userId, courseId, lectureId, timestamp, text }) {
