@@ -90,7 +90,7 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
       playerRef.current = null;
       readyRef.current  = false;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playlistId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navigate when lecture changes
   useEffect(() => {
