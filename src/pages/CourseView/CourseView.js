@@ -98,7 +98,7 @@ export default function CourseView({ user, courseId, onBack }) {
         if (activeLecId) {
           bumpProgress(activeLecId, pct);
           try {
-            const sec = Math.floor(window._ytplayer?.getCurrentTime?.() || 0);
+            const sec = getCurrentTime();
             setCurSec(sec);
             checkNotePopup(sec);
           } catch {}
