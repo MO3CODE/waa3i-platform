@@ -368,3 +368,300 @@
   gap: 10px;
   align-items: flex-start;
 }
+
+/* ── Courses Tab (Admin) ─────────────────────────────────── */
+.courses-tab {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  height: calc(100vh - 80px);
+}
+
+.courses-panel,
+.lectures-panel {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.courses-list,
+.lectures-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.course-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.course-row:hover,
+.course-row.active {
+  background: var(--surface);
+}
+
+.course-row-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.course-row-icon { font-size: 18px; flex-shrink: 0; }
+.course-row-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.course-row-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+.course-row-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.course-row:hover .course-row-actions { opacity: 1; }
+
+.lecture-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.lec-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.lec-info { flex: 1; min-width: 0; }
+.lec-title { font-size: 13px; color: var(--text); font-weight: 600; }
+.lec-sub { font-size: 11px; color: var(--text-3); }
+
+.lec-actions { display: flex; gap: 4px; }
+
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.icon-btn:hover { border-color: var(--gold); color: var(--gold); }
+.icon-btn.danger:hover { border-color: var(--error); color: var(--error); }
+
+.select-course-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+
+.color-input {
+  width: 48px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+}
+
+/* ── Roles Tab (Admin) ───────────────────────────────────── */
+.roles-tab { display: flex; flex-direction: column; gap: 20px; }
+
+.role-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.role-stat-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.role-stat-card:hover,
+.role-stat-card.active { background: var(--surface); }
+
+.stat-count { font-size: 28px; font-weight: 900; }
+.stat-label { font-size: 11px; color: var(--text-3); margin-top: 4px; }
+
+.roles-toolbar {
+  display: flex;
+  gap: 10px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.search-input:focus { outline: none; border-color: var(--gold); }
+
+.filter-select {
+  padding: 9px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.users-table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.users-table th {
+  padding: 12px 16px;
+  background: var(--bg-2);
+  color: var(--text-3);
+  font-weight: 700;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.users-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.users-table tr:last-child td { border-bottom: none; }
+.users-table tbody tr:hover td { background: var(--surface); }
+.current-user-row td { background: rgba(201,168,76,0.04); }
+
+.user-cell { display: flex; align-items: center; gap: 8px; }
+
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 13px; color: var(--bg); flex-shrink: 0;
+}
+
+.user-avatar.lg { width: 44px; height: 44px; font-size: 17px; }
+
+.user-name { font-weight: 600; }
+.user-email { color: var(--text-3); font-size: 12px; }
+.date-cell { color: var(--text-3); font-size: 12px; }
+
+.you-badge {
+  background: var(--gold-bg);
+  color: var(--gold);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--gold)44;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.row-actions { display: flex; gap: 6px; }
+
+.edit-role-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surface);
+  border-radius: 10px;
+  margin-bottom: 20px;
+}
+
+.edit-role-name { font-weight: 700; color: var(--text); font-size: 15px; }
+.edit-role-email { color: var(--text-3); font-size: 12px; margin-top: 3px; }
+
+.role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.role-option input[type="radio"] { display: none; }
+.role-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+

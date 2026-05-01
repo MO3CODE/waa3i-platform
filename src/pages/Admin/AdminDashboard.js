@@ -1,44 +1,96 @@
 // ============================================================
-// src/pages/Admin/AdminDashboard.js
-// Full admin control panel — students, quizzes, notifs, live, certs
+// src/pages/Admin/AdminDashboard.js — v2
+// لوحة الجوكر والإدارة الكاملة — أدوار متعددة
 // ============================================================
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
-  getUsers, approveUser, rejectUser,
-  getQuizzes, saveQuiz, deleteQuiz, getQuizResults, getAllProgress,
+  getUsers, getQuizzes, saveQuiz, deleteQuiz,
+  getQuizResults, getAllProgress,
   getNotifications, addNotification, deleteNotification,
-  getCertificates, issueCertificate, getUserCertificate, getQuizByCourse,
+  getCertificates, issueCertificate,
   getLiveSessions, saveLiveSession, deleteLiveSession,
+  getCourses,
+  ROLE_LABELS, canManageContent, canManageQuizzes, canManageStudents, canManageRoles,
 } from "../../data/db";
 import { toArabic, formatDate, countWatched, coursePct, isCourseComplete, NOTIF_COLOR } from "../../utils/helpers";
 import { useToast } from "../../hooks/useToast";
-import { Ring, Btn, Glass, Pill, Modal, Field, Picker, ProgressBar, SectionHeader, Toast } from "../../components/ui";
+import { Btn, Glass, Pill, Modal, Field, Picker, ProgressBar, SectionHeader, Toast } from "../../components/ui";
 import { Sidebar } from "../../components/layout/Sidebar";
 import QuizBuilder from "./QuizBuilder";
+import CoursesTab  from "./tabs/CoursesTab";
+import RolesTab    from "./tabs/RolesTab";
 
-export default function AdminDashboard({ user, courses, onLogout }) {
+export default function AdminDashboard({ user, onLogout, refreshUser }) {
+  const navigate = useNavigate();
   const [tab,  setTab]  = useState("overview");
   const [tick, setTick] = useState(0);
   const { toast, show: showToast, hide } = useToast();
+
+  // ── async data ─────────────────────────────────────────────
+  const [students,    setStudents]    = useState([]);
+  const [quizzes,     setQuizzes]     = useState([]);
+  const [allResults,  setAllResults]  = useState([]);
+  const [allProgress, setAllProgress] = useState({});
+  const [allCerts,    setAllCerts]    = useState([]);
+  const [notifs,      setNotifs]      = useState([]);
+  const [sessions,    setSessions]    = useState([]);
+  const [courses,     setCourses]     = useState([]);
+  const [loading,     setLoading]     = useState(true);
+
+  useEffect(() => { loadAll(); }, [tick]);
+
+  async function loadAll() {
+    setLoading(true);
+    const [u, q, qr, ap, c, n, s, co] = await Promise.all([
+      getUsers("student"),
+      getQuizzes(),
+      getQuizResults(),
+      getAllProgress(),
+      getCertificates(),
+      getNotifications("all"),
+      getLiveSessions(),
+      getCourses(),
+    ]);
+    setStudents(u);
+    setQuizzes(q);
+    setAllResults(qr);
+    setAllProgress(ap);
+    setAllCerts(c);
+    setNotifs(n);
+    setSessions(s);
+    setCourses(co);
+    setLoading(false);
+  }
+
   const rr = () => setTick(t => t + 1);
 
-  const students    = getUsers("student");
-  const quizzes     = getQuizzes();
-  const allResults  = getQuizResults();
-  const allProgress = getAllProgress();
-  const allCerts    = getCertificates();
-  const notifs      = getNotifications("all");
-  const sessions    = getLiveSessions();
-  const pending     = students.filter(s => !s.approved);
+  function handleLogout() {
+    onLogout();
+    navigate("/");
+  }
 
+  // ── Build nav based on role ────────────────────────────────
   const NAV_ITEMS = [
-    { id: "overview", label: "📊 نظرة عامة"  },
-    { id: "students", label: `👥 الطلاب${pending.length > 0 ? ` · ${toArabic(pending.length)}` : ""}` },
-    { id: "quizzes",  label: "📝 الاختبارات" },
-    { id: "notifs",   label: "🔔 الإشعارات"  },
-    { id: "live",     label: "📡 اللقاءات"   },
-    { id: "certs",    label: "🏅 الشهادات"   },
-  ];
+    { id: "overview", label: "📊 نظرة عامة", always: true },
+    { id: "students", label: `👥 الطلاب`, show: canManageStudents(user.role) },
+    { id: "courses",  label: "📚 المواد",    show: canManageContent(user.role) },
+    { id: "quizzes",  label: "📝 الاختبارات", show: canManageQuizzes(user.role) },
+    { id: "notifs",   label: "🔔 الإشعارات", always: true },
+    { id: "live",     label: "📡 اللقاءات",  always: true },
+    { id: "certs",    label: "🏅 الشهادات",  show: canManageStudents(user.role) },
+    { id: "roles",    label: "👤 الأدوار",   show: canManageRoles(user.role) },
+  ].filter(x => x.always || x.show);
+
+  if (loading) {
+    return (
+      <div className="admin-layout">
+        <div className="page-content" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ color: "var(--text-3)", fontSize: 16 }}>جاري التحميل...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-layout">
@@ -48,14 +100,16 @@ export default function AdminDashboard({ user, courses, onLogout }) {
         user={user}
         activeTab={tab}
         onTabChange={setTab}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navItems={NAV_ITEMS}
         logo={
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 24, color: "var(--gold)" }}>☽</span>
             <div>
               <div style={{ fontWeight: 900, fontSize: 15, color: "var(--text)" }}>لوحة الإدارة</div>
-              <div style={{ fontSize: 10, color: "var(--text-3)", letterSpacing: ".04em" }}>منصة وعي</div>
+              <div style={{ fontSize: 10, color: "var(--text-3)" }}>
+                {ROLE_LABELS[user.role] || user.role}
+              </div>
             </div>
           </div>
         }
@@ -65,56 +119,15 @@ export default function AdminDashboard({ user, courses, onLogout }) {
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (
-          <div className="anim-fade-in">
-            <SectionHeader title="نظرة عامة" />
-            <div className="stats-grid">
-              {[
-                { label: "الطلاب المسجلون", value: toArabic(students.filter(s => s.approved).length), icon: "👥", color: "var(--info)"    },
-                { label: "بانتظار الموافقة", value: toArabic(pending.length),                         icon: "⏳", color: "var(--warning)" },
-                { label: "اختبارات أُجريت",  value: toArabic(allResults.length),                      icon: "📝", color: "var(--success)" },
-                { label: "شهادات صادرة",     value: toArabic(allCerts.length),                        icon: "🏅", color: "var(--gold)"    },
-              ].map(s => (
-                <Glass key={s.label} className="stat-tile" style={{ borderTop: `2px solid ${s.color}44` }}>
-                  <div style={{ fontSize: 30, marginBottom: 8 }}>{s.icon}</div>
-                  <div style={{ fontWeight: 900, fontSize: 28, color: s.color }}>{s.value}</div>
-                  <div style={{ color: "var(--text-3)", fontSize: 12, marginTop: 3 }}>{s.label}</div>
-                </Glass>
-              ))}
-            </div>
-
-            <Glass style={{ padding: "20px 24px" }}>
-              <h3 style={{ margin: "0 0 16px", color: "var(--text)", fontSize: 16 }}>آخر نتائج الاختبارات</h3>
-              {allResults.length === 0 && <p style={{ color: "var(--text-3)" }}>لا توجد نتائج بعد</p>}
-              {[...allResults].reverse().slice(0, 8).map(r => {
-                const s = students.find(x => x.id === r.userId);
-                const c = courses.find(x => x.id  === r.courseId);
-                return (
-                  <div key={r.id} style={{
-                    display: "flex", gap: 12, alignItems: "center",
-                    padding: "10px 0", borderBottom: "1px solid var(--border)", flexWrap: "wrap",
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: "50%",
-                      background: r.passed ? "rgba(39,174,96,0.15)" : "rgba(231,76,60,0.12)",
-                      color: r.passed ? "var(--success)" : "var(--error)",
-                      display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800,
-                    }}>{r.passed ? "✓" : "✗"}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}>{s?.name || r.userId}</div>
-                      <div style={{ fontSize: 11, color: "var(--text-3)" }}>{c?.full || r.courseId} · {formatDate(r.date)}</div>
-                    </div>
-                    <Pill color={r.passed ? "var(--success)" : "var(--error)"} bg={r.passed ? "rgba(39,174,96,0.1)" : "rgba(231,76,60,0.1)"}>
-                      {r.score}%
-                    </Pill>
-                  </div>
-                );
-              })}
-            </Glass>
-          </div>
+          <OverviewPanel
+            students={students} courses={courses}
+            allResults={allResults} allCerts={allCerts}
+            allProgress={allProgress} user={user}
+          />
         )}
 
         {/* ── STUDENTS ── */}
-        {tab === "students" && (
+        {tab === "students" && canManageStudents(user.role) && (
           <StudentsPanel
             students={students} courses={courses}
             allProgress={allProgress} allResults={allResults}
@@ -122,8 +135,13 @@ export default function AdminDashboard({ user, courses, onLogout }) {
           />
         )}
 
+        {/* ── COURSES ── */}
+        {tab === "courses" && canManageContent(user.role) && (
+          <CoursesTab user={user} />
+        )}
+
         {/* ── QUIZZES ── */}
-        {tab === "quizzes" && (
+        {tab === "quizzes" && canManageQuizzes(user.role) && (
           <QuizzesPanel courses={courses} quizzes={quizzes} showToast={showToast} rr={rr} />
         )}
 
@@ -138,12 +156,17 @@ export default function AdminDashboard({ user, courses, onLogout }) {
         )}
 
         {/* ── CERTIFICATES ── */}
-        {tab === "certs" && (
+        {tab === "certs" && canManageStudents(user.role) && (
           <CertsPanel
             students={students} certs={allCerts} user={user}
             courses={courses} allProgress={allProgress} allResults={allResults}
-            showToast={showToast} rr={rr}
+            quizzes={quizzes} showToast={showToast} rr={rr}
           />
+        )}
+
+        {/* ── ROLES ── */}
+        {tab === "roles" && canManageRoles(user.role) && (
+          <RolesTab user={user} />
         )}
 
       </main>
@@ -151,43 +174,97 @@ export default function AdminDashboard({ user, courses, onLogout }) {
   );
 }
 
+// ─── Overview panel ────────────────────────────────────────
+function OverviewPanel({ students, courses, allResults, allCerts, allProgress, user }) {
+  const totalLectures = courses.reduce((s, c) => s + (c.lectureCount || 0), 0);
+  const avgProgress = students.length === 0 ? 0 : Math.round(
+    students.reduce((sum, s) => {
+      const prog  = allProgress[s.id] || {};
+      const total = courses.reduce((t, c) => t + countWatched(prog[c.id] || {}), 0);
+      return sum + (totalLectures > 0 ? Math.round((total / totalLectures) * 100) : 0);
+    }, 0) / students.length
+  );
+
+  return (
+    <div className="anim-fade-in">
+      <SectionHeader title={`مرحباً، ${user.name} 👋`} />
+      <div className="stats-grid">
+        {[
+          { label: "الطلاب المسجلون", value: toArabic(students.length),      icon: "👥", color: "var(--info)"    },
+          { label: "اختبارات أُجريت",  value: toArabic(allResults.length),   icon: "📝", color: "var(--success)" },
+          { label: "شهادات صادرة",     value: toArabic(allCerts.length),     icon: "🏅", color: "var(--gold)"    },
+          { label: "متوسط التقدم",      value: `${toArabic(avgProgress)}%`,   icon: "📊", color: "var(--warning)" },
+        ].map(s => (
+          <Glass key={s.label} className="stat-tile" style={{ borderTop: `2px solid ${s.color}44` }}>
+            <div style={{ fontSize: 30, marginBottom: 8 }}>{s.icon}</div>
+            <div style={{ fontWeight: 900, fontSize: 28, color: s.color }}>{s.value}</div>
+            <div style={{ color: "var(--text-3)", fontSize: 12, marginTop: 3 }}>{s.label}</div>
+          </Glass>
+        ))}
+      </div>
+
+      <Glass style={{ padding: "20px 24px" }}>
+        <h3 style={{ margin: "0 0 16px", color: "var(--text)", fontSize: 16 }}>آخر نتائج الاختبارات</h3>
+        {allResults.length === 0 && <p style={{ color: "var(--text-3)" }}>لا توجد نتائج بعد</p>}
+        {[...allResults].reverse().slice(0, 8).map(r => {
+          const s = students.find(x => x.id === r.userId);
+          const c = courses.find(x => x.id  === r.courseId);
+          return (
+            <div key={r.id} style={{
+              display: "flex", gap: 12, alignItems: "center",
+              padding: "10px 0", borderBottom: "1px solid var(--border)", flexWrap: "wrap",
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%",
+                background: r.passed ? "rgba(39,174,96,0.15)" : "rgba(231,76,60,0.12)",
+                color: r.passed ? "var(--success)" : "var(--error)",
+                display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800,
+              }}>{r.passed ? "✓" : "✗"}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}>{s?.name || r.userId}</div>
+                <div style={{ fontSize: 11, color: "var(--text-3)" }}>{c?.title || r.courseId} · {formatDate(r.date)}</div>
+              </div>
+              <Pill color={r.passed ? "var(--success)" : "var(--error)"} bg={r.passed ? "rgba(39,174,96,0.1)" : "rgba(231,76,60,0.1)"}>
+                {r.score}%
+              </Pill>
+            </div>
+          );
+        })}
+      </Glass>
+    </div>
+  );
+}
+
 // ─── Students panel ────────────────────────────────────────
 function StudentsPanel({ students, courses, allProgress, allResults, showToast, rr }) {
-  const [filter, setFilter] = useState("all");
   const [detail, setDetail] = useState(null);
+  const [search, setSearch] = useState("");
 
-  const shown = students.filter(s =>
-    filter === "all" ||
-    (filter === "pending"  && !s.approved) ||
-    (filter === "approved" && s.approved)
-  );
+  const shown = students.filter(s => {
+    const matchSearch = !search || s.name?.includes(search) || s.email?.includes(search);
+    return matchSearch;
+  });
 
   return (
     <div className="anim-fade-in">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
         <SectionHeader title="إدارة الطلاب" />
-        <div style={{ display: "flex", gap: 8 }}>
-          {[["all","الكل"],["pending","بانتظار القبول"],["approved","مقبولون"]].map(([k,l]) => (
-            <button key={k} onClick={() => setFilter(k)} style={{
-              padding: "7px 16px", borderRadius: 20,
-              border: `1px solid ${filter === k ? "var(--gold)" : "var(--border)"}`,
-              cursor: "pointer", fontFamily: "var(--font)", fontSize: 13,
-              fontWeight: filter === k ? 700 : 400,
-              background: filter === k ? "var(--gold-bg)" : "transparent",
-              color: filter === k ? "var(--gold)" : "var(--text-2)",
-              transition: "all 0.2s",
-            }}>{l}</button>
-          ))}
-        </div>
+        <input
+          className="search-input"
+          placeholder="بحث بالاسم أو البريد..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--bg-2)", color: "var(--text)", fontFamily: "var(--font)", fontSize: 13 }}
+        />
       </div>
 
       <Glass hover={false} style={{ overflow: "hidden" }}>
-        {shown.length === 0 && <p style={{ padding: 24, color: "var(--text-3)" }}>لا يوجد طلاب في هذه الفئة</p>}
+        {shown.length === 0 && <p style={{ padding: 24, color: "var(--text-3)" }}>لا يوجد طلاب</p>}
         {shown.map(s => {
           const prog   = allProgress[s.id] || {};
           const total  = courses.reduce((sum, c) => sum + countWatched(prog[c.id] || {}), 0);
-          const totalL = courses.reduce((sum, c) => sum + c.lectures, 0);
-          const pct    = Math.round((total / totalL) * 100);
+          const totalL = courses.reduce((sum, c) => sum + (c.lectureCount || 0), 0);
+          const pct    = totalL > 0 ? Math.round((total / totalL) * 100) : 0;
 
           return (
             <div key={s.id} className="student-row">
@@ -201,39 +278,29 @@ function StudentsPanel({ students, courses, allProgress, allResults, showToast, 
                 <div style={{ fontSize: 10, color: "var(--text-3)" }}>التقدم</div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {!s.approved ? (
-                  <>
-                    <Btn size="sm" onClick={() => { approveUser(s.id); showToast(`تم قبول ${s.name}`); rr(); }}>✓ قبول</Btn>
-                    <Btn size="sm" variant="danger" onClick={() => { if (window.confirm(`رفض ${s.name}؟`)) { rejectUser(s.id); showToast("تم الرفض", "error"); rr(); } }}>✗ رفض</Btn>
-                  </>
-                ) : (
-                  <>
-                    <Pill color="var(--success)" bg="rgba(39,174,96,0.1)">مقبول</Pill>
-                    <Btn size="sm" variant="subtle" onClick={() => setDetail(s)}>تفاصيل</Btn>
-                  </>
-                )}
+                <Pill color="var(--success)" bg="rgba(39,174,96,0.1)">مسجل</Pill>
+                <Btn size="sm" variant="subtle" onClick={() => setDetail(s)}>تفاصيل</Btn>
               </div>
             </div>
           );
         })}
       </Glass>
 
-      {/* Student detail modal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`تقدم: ${detail?.name}`} width={580}>
         {detail && (
           <div>
             {courses.map(c => {
               const cp  = (allProgress[detail.id] || {})[c.id] || {};
               const w   = countWatched(cp);
-              const p   = coursePct(cp, c.lectures);
+              const p   = coursePct(cp, c.lectureCount || 0);
               const qr  = allResults.find(r => r.userId === detail.id && r.courseId === c.id);
               return (
                 <div key={c.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
                   <span style={{ fontSize: 18, color: c.accent }}>{c.icon}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text)" }}>{c.full}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "var(--text)" }}>{c.title}</div>
                     <ProgressBar pct={p} color={c.accent} height={4} />
-                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3 }}>{toArabic(w)}/{toArabic(c.lectures)} · {p}%</div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 3 }}>{toArabic(w)}/{toArabic(c.lectureCount || 0)} · {p}%</div>
                   </div>
                   {qr && <Pill color={qr.passed ? "var(--success)" : "var(--error)"} bg={qr.passed ? "rgba(39,174,96,0.1)" : "rgba(231,76,60,0.1)"}>{qr.score}%</Pill>}
                 </div>
@@ -272,13 +339,13 @@ function QuizzesPanel({ courses, quizzes, showToast, rr }) {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
                   <h4 style={{ margin: "0 0 4px", color: "var(--text)", fontSize: 15, fontWeight: 800 }}>{q.title}</h4>
-                  <p style={{ margin: 0, color: "var(--text-3)", fontSize: 12 }}>{c?.full || q.courseId}</p>
+                  <p style={{ margin: 0, color: "var(--text-3)", fontSize: 12 }}>{c?.title || q.courseId}</p>
                 </div>
                 <span style={{ fontSize: 22, color: c?.accent || "var(--gold)" }}>{c?.icon || "📝"}</span>
               </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
                 <Pill color="var(--info)"    bg="rgba(58,139,192,0.1)">❓ {toArabic(q.questions?.length || 0)} سؤال</Pill>
-                <Pill color="var(--gold)"    bg="var(--gold-bg)">⏱ {toArabic(Math.floor(q.timeLimit / 60))} د</Pill>
+                <Pill color="var(--gold)"    bg="var(--gold-bg)">⏱ {toArabic(Math.floor((q.timeLimit || 0) / 60))} د</Pill>
                 <Pill color="var(--success)" bg="rgba(39,174,96,0.1)">✅ {toArabic(q.passMark)}%</Pill>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -320,7 +387,6 @@ function NotifsPanel({ notifs, showToast, rr }) {
   return (
     <div className="anim-fade-in">
       <SectionHeader title="إدارة الإشعارات" />
-
       <Glass style={{ padding: "22px 24px", marginBottom: 24 }}>
         <h3 style={{ margin: "0 0 16px", color: "var(--text)", fontSize: 16 }}>✉ إرسال إشعار جديد</h3>
         <Field label="العنوان *" value={form.title} onChange={set("title")} placeholder="عنوان الإشعار" />
@@ -346,7 +412,7 @@ function NotifsPanel({ notifs, showToast, rr }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 14 }}>{n.title}</div>
               <div style={{ color: "var(--text-2)", fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>{n.body}</div>
-              <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 4 }}>{formatDate(n.createdAt)} · قرأه {toArabic(n.read.length)}</div>
+              <div style={{ color: "var(--text-3)", fontSize: 11, marginTop: 4 }}>{formatDate(n.createdAt)} · قرأه {toArabic(n.read?.length || 0)}</div>
             </div>
             <button
               onClick={() => { deleteNotification(n.id); showToast("تم الحذف","error"); rr(); }}
@@ -432,14 +498,14 @@ function LivePanel({ sessions, showToast, rr }) {
 }
 
 // ─── Certificates panel ─────────────────────────────────────
-function CertsPanel({ students, certs, user, courses, allProgress, allResults, showToast, rr }) {
+function CertsPanel({ students, certs, user, courses, allProgress, allResults, quizzes, showToast, rr }) {
   const eligible = students.filter(s => {
-    if (!s.approved || getUserCertificate(s.id)) return false;
+    if (certs.find(c => c.userId === s.id)) return false;
     const prog    = allProgress[s.id] || {};
-    const allDone = courses.every(c => isCourseComplete(prog[c.id] || {}, c.lectures));
+    const allDone = courses.every(c => isCourseComplete(prog[c.id] || {}, c.lectureCount || 0));
     if (!allDone) return false;
     return courses.every(c => {
-      const q = getQuizByCourse(c.id);
+      const q = quizzes.find(q => q.courseId === c.id);
       if (!q) return true;
       const r = allResults.find(r => r.userId === s.id && r.quizId === q.id);
       return r?.passed;

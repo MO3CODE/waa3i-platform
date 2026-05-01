@@ -1,7 +1,6 @@
 // ============================================================
 // src/data/db.js
-// Firebase Firestore + Authentication
-// يحل محل localStorage — بيانات حقيقية مشتركة بين جميع المستخدمين
+// Firebase Firestore + Authentication — v2
 // ============================================================
 
 import { initializeApp } from "firebase/app";
@@ -14,13 +13,12 @@ import {
 import {
   getFirestore,
   doc, getDoc, setDoc, updateDoc, deleteDoc,
-  collection, getDocs, addDoc, query, where,
+  collection, getDocs, addDoc, query, where, orderBy,
   serverTimestamp, arrayUnion,
 } from "firebase/firestore";
 
-import { COURSES } from "./courses";
+import { COURSES as STATIC_COURSES } from "./courses";
 
-// ── Firebase config ────────────────────────────────────────
 const firebaseConfig = {
   apiKey:            "AIzaSyCxIRMS_hYLmFfz5iP4bqrJ3vNrsrFZxO0",
   authDomain:        "waa3i-platform.firebaseapp.com",
@@ -34,7 +32,6 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth        = getAuth(firebaseApp);
 const db          = getFirestore(firebaseApp);
 
-// ── Helpers ────────────────────────────────────────────────
 const col = (path)     => collection(db, path);
 const ref = (path, id) => doc(db, path, id);
 
@@ -45,6 +42,43 @@ function toISO(ts) {
   return new Date().toISOString();
 }
 
+// ── ROLES ──────────────────────────────────────────────────
+export const ROLES = {
+  SUPERADMIN:      "superadmin",
+  CONTENT_MANAGER: "content_manager",
+  INSTRUCTOR_ADMIN:"instructor_admin",
+  STUDENT_ADMIN:   "student_admin",
+  STUDENT:         "student",
+};
+
+export const ROLE_LABELS = {
+  superadmin:       "جوكر (مدير عام)",
+  content_manager:  "مدير محتوى",
+  instructor_admin: "مدير أستاذ",
+  student_admin:    "مشرف طلاب",
+  student:          "طالب",
+};
+
+export function isAdmin(role) {
+  return ["superadmin", "content_manager", "instructor_admin", "student_admin"].includes(role);
+}
+
+export function canManageContent(role) {
+  return ["superadmin", "content_manager"].includes(role);
+}
+
+export function canManageQuizzes(role) {
+  return ["superadmin", "content_manager", "instructor_admin"].includes(role);
+}
+
+export function canManageStudents(role) {
+  return ["superadmin", "student_admin"].includes(role);
+}
+
+export function canManageRoles(role) {
+  return role === "superadmin";
+}
+
 // ── AUTH ───────────────────────────────────────────────────
 
 export async function register({ name, email, password }) {
@@ -52,12 +86,12 @@ export async function register({ name, email, password }) {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     const user = {
       id:        cred.user.uid,
-      role:      "student",
+      role:      ROLES.STUDENT,
       name,
       email,
-      approved:  true,
       createdAt: new Date().toISOString().split("T")[0],
       avatar:    name[0],
+      language:  "ar",
     };
     await setDoc(ref("users", cred.user.uid), user);
     return { user };
@@ -75,15 +109,14 @@ export async function seedAdminUser() {
     const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
     await setDoc(ref("users", cred.user.uid), {
       id:        cred.user.uid,
-      role:      "admin",
-      name:      "المدير",
+      role:      ROLES.SUPERADMIN,
+      name:      "الجوكر",
       email:     ADMIN_EMAIL,
-      approved:  true,
       createdAt: new Date().toISOString().split("T")[0],
-      avatar:    "م",
+      avatar:    "ج",
+      language:  "ar",
     });
   } catch (e) {
-    // auth/email-already-in-use means admin already exists — that's fine
     if (e.code !== "auth/email-already-in-use") {
       console.warn("seedAdminUser:", e.message);
     }
@@ -95,9 +128,7 @@ export async function login({ email, password }) {
     const cred = await signInWithEmailAndPassword(auth, email, password);
     const snap = await getDoc(ref("users", cred.user.uid));
     if (!snap.exists()) return { error: "المستخدم غير موجود" };
-    const user = snap.data();
-    if (!user.approved) return { error: "حسابك قيد المراجعة" };
-    return { user };
+    return { user: snap.data() };
   } catch {
     return { error: "البريد أو كلمة المرور غير صحيحة" };
   }
@@ -116,16 +147,90 @@ export async function getUsers(role) {
   return snap.docs.map(d => d.data());
 }
 
-export async function approveUser(id) {
-  await updateDoc(ref("users", id), { approved: true });
+export async function updateUserRole(userId, newRole) {
+  await updateDoc(ref("users", userId), { role: newRole });
 }
 
-export async function rejectUser(id) {
-  await deleteDoc(ref("users", id));
+export async function deleteUser(userId) {
+  await deleteDoc(ref("users", userId));
 }
 
-// ── COURSES ────────────────────────────────────────────────
-export function getCourses() { return COURSES; }
+// ── COURSES (Firestore) ────────────────────────────────────
+
+export async function getCourses() {
+  const snap = await getDocs(query(col("courses"), orderBy("order", "asc")));
+  if (snap.empty) return [];
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function getCourse(courseId) {
+  const snap = await getDoc(ref("courses", courseId));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() };
+}
+
+export async function saveCourse(course) {
+  const { id, ...data } = course;
+  if (id) {
+    await setDoc(ref("courses", id), data, { merge: true });
+    return id;
+  } else {
+    const docRef = await addDoc(col("courses"), data);
+    return docRef.id;
+  }
+}
+
+export async function deleteCourse(courseId) {
+  await deleteDoc(ref("courses", courseId));
+  const lectSnap = await getDocs(query(col("lectures"), where("courseId", "==", courseId)));
+  await Promise.all(lectSnap.docs.map(d => deleteDoc(d.ref)));
+}
+
+// ── LECTURES ───────────────────────────────────────────────
+
+export async function getLectures(courseId) {
+  const snap = await getDocs(
+    query(col("lectures"), where("courseId", "==", courseId), orderBy("order", "asc"))
+  );
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function saveLecture(lecture) {
+  const { id, ...data } = lecture;
+  if (id) {
+    await setDoc(ref("lectures", id), data, { merge: true });
+    return id;
+  } else {
+    const docRef = await addDoc(col("lectures"), data);
+    return docRef.id;
+  }
+}
+
+export async function deleteLecture(lectureId) {
+  await deleteDoc(ref("lectures", lectureId));
+}
+
+// ── SEED COURSES from static file (runs once) ──────────────
+
+export async function seedCoursesIfEmpty() {
+  const snap = await getDocs(col("courses"));
+  if (!snap.empty) return;
+
+  for (const course of STATIC_COURSES) {
+    const { id, lectures: lectureCount, ...rest } = course;
+    await setDoc(ref("courses", id), { ...rest, lectureCount, isActive: true });
+
+    for (let i = 0; i < lectureCount; i++) {
+      await addDoc(col("lectures"), {
+        courseId:      id,
+        title:         `محاضرة ${i + 1}`,
+        playlistIndex: i + 1,
+        order:         i,
+        isActive:      true,
+      });
+    }
+  }
+}
 
 // ── PROGRESS ───────────────────────────────────────────────
 
@@ -141,14 +246,58 @@ export async function getAllProgress() {
   return out;
 }
 
-export async function setLectureProgress(userId, courseId, lectureIdx, pct) {
+export async function setLectureProgress(userId, courseId, lectureId, pct) {
   const snap = await getDoc(ref("progress", userId));
   const data = snap.exists() ? snap.data() : {};
-  if (pct <= (data[courseId]?.[lectureIdx] || 0)) return;
+  if (pct <= (data[courseId]?.[lectureId] || 0)) return;
   await setDoc(ref("progress", userId), {
     ...data,
-    [courseId]: { ...(data[courseId] || {}), [lectureIdx]: pct },
+    [courseId]: { ...(data[courseId] || {}), [lectureId]: pct },
+  }, { merge: true });
+}
+
+// ── NOTES (Firestore) ──────────────────────────────────────
+
+export async function getNotes(userId, courseId, lectureId) {
+  const snap = await getDocs(
+    query(
+      col("notes"),
+      where("userId",    "==", userId),
+      where("courseId",  "==", courseId),
+      where("lectureId", "==", lectureId),
+      orderBy("timestamp", "asc")
+    )
+  );
+  return snap.docs.map(d => ({ id: d.id, ...d.data(), createdAt: toISO(d.data().createdAt) }));
+}
+
+export async function addNote({ userId, courseId, lectureId, timestamp, text }) {
+  const docRef = await addDoc(col("notes"), {
+    userId, courseId, lectureId, timestamp, text,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
+  return { id: docRef.id, userId, courseId, lectureId, timestamp, text };
+}
+
+export async function updateNote(noteId, text) {
+  await updateDoc(ref("notes", noteId), { text, updatedAt: serverTimestamp() });
+}
+
+export async function deleteNote(noteId) {
+  await deleteDoc(ref("notes", noteId));
+}
+
+export async function getAllNotesCount(userId, courseId) {
+  const snap = await getDocs(
+    query(col("notes"), where("userId", "==", userId), where("courseId", "==", courseId))
+  );
+  const counts = {};
+  snap.docs.forEach(d => {
+    const lid = d.data().lectureId;
+    counts[lid] = (counts[lid] || 0) + 1;
+  });
+  return counts;
 }
 
 // ── QUIZZES ────────────────────────────────────────────────
@@ -263,20 +412,4 @@ export async function saveLiveSession(session) {
 
 export async function deleteLiveSession(id) {
   await deleteDoc(ref("liveSessions", id));
-}
-
-// ── NOTES — تبقى محلية (ملاحظات شخصية) ───────────────────
-
-function notesKey(userId, courseId, idx) {
-  return `waa3i_notes_${userId}_${courseId}_${idx}`;
-}
-
-export function getNotes(userId, courseId, lectureIdx) {
-  try { return JSON.parse(localStorage.getItem(notesKey(userId, courseId, lectureIdx))) || []; }
-  catch { return []; }
-}
-
-export function saveNotes(userId, courseId, lectureIdx, notes) {
-  try { localStorage.setItem(notesKey(userId, courseId, lectureIdx), JSON.stringify(notes)); }
-  catch {}
 }

@@ -1,54 +1,49 @@
 // ============================================================
-// src/pages/CourseView/NotesPanel.js
-// Timestamped notes — stored per user + course + lecture
+// src/pages/CourseView/NotesPanel.js — v2
+// الملاحظات محفوظة في Firestore (تتزامن بين الأجهزة)
 // ============================================================
 import React, { useState, useEffect } from "react";
-import { getNotes, saveNotes } from "../../data/db";
+import { getNotes, addNote, updateNote, deleteNote } from "../../data/db";
 import { toArabic, formatSeconds } from "../../utils/helpers";
 import { Glass, Btn, Pill } from "../../components/ui";
 
-export default function NotesPanel({ userId, courseId, lectureIdx, accentColor, getPlayerTime, seekTo }) {
+export default function NotesPanel({ userId, courseId, lectureId, accentColor, getPlayerTime, seekTo }) {
   const [notes,    setNotes]    = useState([]);
   const [text,     setText]     = useState("");
   const [editId,   setEditId]   = useState(null);
   const [editText, setEditText] = useState("");
+  const [loading,  setLoading]  = useState(false);
 
-  // Reload whenever lecture changes
   useEffect(() => {
-    setNotes(getNotes(userId, courseId, lectureIdx));
+    if (!lectureId) return;
+    setLoading(true);
     setText("");
     setEditId(null);
-  }, [userId, courseId, lectureIdx]);
+    getNotes(userId, courseId, lectureId).then(n => {
+      setNotes(n);
+      setLoading(false);
+    });
+  }, [userId, courseId, lectureId]);
 
-  function addNote() {
+  async function handleAdd() {
     const trimmed = text.trim();
     if (!trimmed) return;
-
-    const sec     = getPlayerTime();
-    const newNote = {
-      id:        Date.now(),
-      sec,
-      text:      trimmed,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updated = [...notes, newNote].sort((a, b) => a.sec - b.sec);
-    setNotes(updated);
-    saveNotes(userId, courseId, lectureIdx, updated);
+    const timestamp = getPlayerTime();
+    const note = await addNote({ userId, courseId, lectureId, timestamp, text: trimmed });
+    setNotes(prev => [...prev, note].sort((a, b) => a.timestamp - b.timestamp));
     setText("");
   }
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      addNote();
+      handleAdd();
     }
   }
 
-  function deleteNote(id) {
-    const updated = notes.filter(n => n.id !== id);
-    setNotes(updated);
-    saveNotes(userId, courseId, lectureIdx, updated);
+  async function handleDelete(noteId) {
+    await deleteNote(noteId);
+    setNotes(prev => prev.filter(n => n.id !== noteId));
   }
 
   function startEdit(note) {
@@ -56,17 +51,15 @@ export default function NotesPanel({ userId, courseId, lectureIdx, accentColor, 
     setEditText(note.text);
   }
 
-  function saveEdit(id) {
-    const updated = notes.map(n => n.id === id ? { ...n, text: editText } : n);
-    setNotes(updated);
-    saveNotes(userId, courseId, lectureIdx, updated);
+  async function handleSaveEdit(noteId) {
+    await updateNote(noteId, editText);
+    setNotes(prev => prev.map(n => n.id === noteId ? { ...n, text: editText } : n));
     setEditId(null);
   }
 
   return (
     <div className="notes-panel">
       <Glass style={{ padding: "16px 18px" }}>
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <span style={{ fontSize: 16 }}>📝</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>ملاحظاتي</span>
@@ -75,7 +68,6 @@ export default function NotesPanel({ userId, courseId, lectureIdx, accentColor, 
           )}
         </div>
 
-        {/* Input row */}
         <div className="notes-input-row">
           <input
             className="input"
@@ -85,29 +77,28 @@ export default function NotesPanel({ userId, courseId, lectureIdx, accentColor, 
             placeholder="اكتب ملاحظتك… (Enter للإضافة)"
             style={{ fontSize: 13 }}
           />
-          <button className="note-add-btn" onClick={addNote}>
+          <button className="note-add-btn" onClick={handleAdd}>
             + إضافة عند الثانية الحالية
           </button>
         </div>
 
-        {/* Empty state */}
-        {notes.length === 0 && (
+        {loading && (
+          <div style={{ color: "var(--text-3)", fontSize: 12, padding: "12px 0" }}>جاري تحميل الملاحظات...</div>
+        )}
+
+        {!loading && notes.length === 0 && (
           <div className="empty-state" style={{ padding: "20px 0" }}>
             <p style={{ fontSize: 13 }}>
               لا توجد ملاحظات لهذه المحاضرة.<br />
-              <span style={{ fontSize: 12, opacity: 0.7 }}>
-                شغّل الفيديو واضغط "+ إضافة" في أي لحظة
-              </span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>شغّل الفيديو واضغط "+ إضافة" في أي لحظة</span>
             </p>
           </div>
         )}
 
-        {/* Notes list */}
         <div className="notes-list">
           {notes.map(note => (
             <div key={note.id} className="note-item">
               {editId === note.id ? (
-                /* Edit mode */
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   <textarea
                     className="textarea"
@@ -117,30 +108,24 @@ export default function NotesPanel({ userId, courseId, lectureIdx, accentColor, 
                     style={{ fontSize: 13, borderColor: accentColor }}
                   />
                   <div style={{ display: "flex", gap: 6 }}>
-                    <Btn onClick={() => saveEdit(note.id)} size="sm">حفظ</Btn>
+                    <Btn onClick={() => handleSaveEdit(note.id)} size="sm">حفظ</Btn>
                     <Btn onClick={() => setEditId(null)} size="sm" variant="subtle">إلغاء</Btn>
                   </div>
                 </div>
               ) : (
-                /* View mode */
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  {/* Timestamp — click to seek */}
                   <button
                     className="note-timestamp-btn"
-                    onClick={() => seekTo(note.sec)}
+                    onClick={() => seekTo(note.timestamp)}
                     style={{ color: accentColor, borderColor: `${accentColor}55` }}
                     onMouseEnter={e => { e.currentTarget.style.background = `${accentColor}20`; }}
                     onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
                   >
-                    ▶ {formatSeconds(note.sec)}
+                    ▶ {formatSeconds(note.timestamp)}
                   </button>
-
-                  {/* Note text */}
                   <span style={{ flex: 1, fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>
                     {note.text}
                   </span>
-
-                  {/* Actions */}
                   <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                     <button
                       className="note-action-btn"
@@ -151,7 +136,7 @@ export default function NotesPanel({ userId, courseId, lectureIdx, accentColor, 
                     >✏</button>
                     <button
                       className="note-action-btn"
-                      onClick={() => deleteNote(note.id)}
+                      onClick={() => handleDelete(note.id)}
                       onMouseEnter={e => { e.currentTarget.style.color = "var(--error)"; }}
                       onMouseLeave={e => { e.currentTarget.style.color = "var(--text-3)"; }}
                       title="حذف"

@@ -3,7 +3,7 @@
 // All reusable "dumb" UI primitives
 // CSS classes come from src/styles/components.css
 // ============================================================
-import React, { useState } from "react";
+import React from "react";
 
 // ── Ring (animated SVG progress circle) ───────────────────
 export function Ring({ pct, color, size = 60, stroke = 5 }) {

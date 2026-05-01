@@ -1,15 +1,21 @@
 // ============================================================
-// src/pages/Student/StudentDashboard.js
+// src/pages/Student/StudentDashboard.js — v2
+// يحمّل المواد من Firestore + React Router
 // ============================================================
 import React, { useState, useEffect } from "react";
-import { getProgress, getNotifications, getQuizResults, getUserCertificate,
-         getLiveSessions, getQuizzes, markNotifRead } from "../../data/db";
+import { useNavigate } from "react-router-dom";
+import {
+  getCourses, getProgress, getNotifications, getQuizResults,
+  getUserCertificate, getLiveSessions, getQuizzes, markNotifRead,
+} from "../../data/db";
 import { toArabic, formatDate, countWatched, coursePct, isCourseComplete, NOTIF_COLOR } from "../../utils/helpers";
-import { Ring, Btn, Glass, Pill, ProgressBar, SectionHeader } from "../../components/ui";
+import { Ring, Glass, Pill, ProgressBar, SectionHeader } from "../../components/ui";
 import { Sidebar } from "../../components/layout/Sidebar";
 
-export default function StudentDashboard({ user, courses, onSelectCourse, onLogout }) {
-  const [tab,      setTab]      = useState("courses");
+export default function StudentDashboard({ user, onLogout }) {
+  const navigate              = useNavigate();
+  const [tab,      setTab]    = useState("courses");
+  const [courses,  setCourses] = useState([]);
   const [progress, setProgress] = useState({});
   const [notifs,   setNotifs]   = useState([]);
   const [qResults, setQResults] = useState([]);
@@ -20,7 +26,8 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
 
   useEffect(() => {
     async function load() {
-      const [prog, nfs, qrs, ct, sess, qzs] = await Promise.all([
+      const [co, prog, nfs, qrs, ct, sess, qzs] = await Promise.all([
+        getCourses(),
         getProgress(user.id),
         getNotifications(user.role),
         getQuizResults(user.id),
@@ -28,6 +35,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         getLiveSessions(),
         getQuizzes(),
       ]);
+      setCourses(co);
       setProgress(prog);
       setNotifs(nfs);
       setQResults(qrs);
@@ -54,11 +62,16 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
     ));
   }
 
+  function handleLogout() {
+    onLogout();
+    navigate("/");
+  }
+
   const unread    = notifs.filter(n => !(n.read || []).includes(user.id)).length;
-  const totalL    = courses.reduce((s, c) => s + c.lectures, 0);
+  const totalL    = courses.reduce((s, c) => s + (c.lectureCount || 0), 0);
   const totalW    = courses.reduce((s, c) => s + countWatched(progress[c.id] || {}), 0);
   const overall   = totalL > 0 ? Math.round((totalW / totalL) * 100) : 0;
-  const doneCount = courses.filter(c => isCourseComplete(progress[c.id] || {}, c.lectures)).length;
+  const doneCount = courses.filter(c => isCourseComplete(progress[c.id] || {}, c.lectureCount || 0)).length;
 
   const NAV_ITEMS = [
     { id: "courses", label: "📚 المواد" },
@@ -74,7 +87,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
         user={user}
         activeTab={tab}
         onTabChange={setTab}
-        onLogout={onLogout}
+        onLogout={handleLogout}
         navItems={NAV_ITEMS}
         logo={
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -104,7 +117,6 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
       />
 
       <main className="page-content">
-
         {loading && (
           <div style={{ textAlign: "center", padding: 80, color: "var(--text-3)" }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
@@ -121,34 +133,36 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
             />
             <div className="grid-auto-300">
               {courses.map((course, idx) => {
-                const cp   = progress[course.id] || {};
-                const p    = coursePct(cp, course.lectures);
-                const done = isCourseComplete(cp, course.lectures);
-                const prev = idx === 0 || isCourseComplete(progress[courses[idx - 1].id] || {}, courses[idx - 1].lectures);
+                const cp      = progress[course.id] || {};
+                const p       = coursePct(cp, course.lectureCount || 0);
+                const done    = isCourseComplete(cp, course.lectureCount || 0);
+                const prevDone = idx === 0 || isCourseComplete(
+                  progress[courses[idx - 1].id] || {},
+                  courses[idx - 1].lectureCount || 0
+                );
                 const quiz = getQuizForCourse(course.id);
                 const qr   = quiz ? getResultForQuiz(quiz.id) : null;
 
                 return (
                   <div
                     key={course.id}
-                    className={`course-card ${!prev ? "locked" : ""}`}
-                    style={{ borderColor: prev ? `${course.accent}22` : "var(--border)" }}
-                    onClick={() => prev && onSelectCourse(course)}
+                    className={`course-card ${!prevDone ? "locked" : ""}`}
+                    style={{ borderColor: prevDone ? `${course.accent}22` : "var(--border)" }}
+                    onClick={() => prevDone && navigate(`/course/${course.id}`)}
                     onMouseEnter={e => {
-                      if (prev) {
+                      if (prevDone) {
                         e.currentTarget.style.borderColor = `${course.accent}55`;
                         e.currentTarget.style.transform   = "translateY(-3px)";
                         e.currentTarget.style.boxShadow   = `0 10px 28px rgba(0,0,0,0.3)`;
                       }
                     }}
                     onMouseLeave={e => {
-                      e.currentTarget.style.borderColor = prev ? `${course.accent}22` : "var(--border)";
+                      e.currentTarget.style.borderColor = prevDone ? `${course.accent}22` : "var(--border)";
                       e.currentTarget.style.transform   = "";
                       e.currentTarget.style.boxShadow   = "";
                     }}
                   >
                     <div className="course-card-accent-glow" style={{ background: course.accent }} />
-
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
                       <div>
                         <div style={{
@@ -159,18 +173,16 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                         }}>
                           {course.icon}
                         </div>
-                        <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 3 }}>{course.full}</div>
+                        <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)", marginBottom: 3 }}>{course.title}</div>
                         <div style={{ fontSize: 12, color: "var(--text-3)" }}>{course.instructor}</div>
                       </div>
                       <Ring pct={p} color={course.accent} size={52} stroke={4} />
                     </div>
-
                     <ProgressBar pct={p} color={course.accent} height={4} />
-
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-                      {!prev && <Pill color="var(--text-3)" bg="var(--surface-2)">🔒 مقفل</Pill>}
-                      {done  && <Pill color="var(--success)" bg="rgba(39,174,96,0.1)">✓ مكتمل</Pill>}
-                      {qr    && <Pill color={qr.passed ? "var(--success)" : "var(--error)"} bg={qr.passed ? "rgba(39,174,96,0.1)" : "rgba(231,76,60,0.1)"}>
+                      {!prevDone && <Pill color="var(--text-3)" bg="var(--surface-2)">🔒 مقفل</Pill>}
+                      {done      && <Pill color="var(--success)" bg="rgba(39,174,96,0.1)">✓ مكتمل</Pill>}
+                      {qr        && <Pill color={qr.passed ? "var(--success)" : "var(--error)"} bg={qr.passed ? "rgba(39,174,96,0.1)" : "rgba(231,76,60,0.1)"}>
                         {qr.passed ? "✓" : "✗"} {qr.score}%
                       </Pill>}
                       {done && quiz && !qr && <Pill color="var(--gold)" bg="var(--gold-bg)">📝 اختبار</Pill>}
@@ -195,8 +207,9 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                   style={{
                     padding: "16px 20px", marginBottom: 12,
                     borderRight: `3px solid ${isRead ? "var(--border)" : (NOTIF_COLOR[n.type] || "var(--gold)")}`,
+                    cursor: "pointer",
                   }}
-                  onClick={() => handleMarkRead(n.id)}
+                  onClick={() => !isRead && handleMarkRead(n.id)}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
                     <strong style={{ color: "var(--text)", fontSize: 14 }}>{n.title}</strong>
@@ -262,7 +275,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                   borderRight: `3px solid ${r.passed ? "var(--success)" : "var(--error)"}`,
                 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15 }}>{c?.full || r.courseId}</div>
+                    <div style={{ fontWeight: 700, color: "var(--text)", fontSize: 15 }}>{c?.title || r.courseId}</div>
                     <div style={{ color: "var(--text-3)", fontSize: 12, marginTop: 4 }}>{formatDate(r.date)}</div>
                   </div>
                   <div style={{ textAlign: "center" }}>
@@ -301,7 +314,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 440, margin: "0 auto" }}>
                   {courses.map(c => {
-                    const done = isCourseComplete(progress[c.id] || {}, c.lectures);
+                    const done = isCourseComplete(progress[c.id] || {}, c.lectureCount || 0);
                     const quiz = getQuizForCourse(c.id);
                     const qr   = quiz ? getResultForQuiz(quiz.id) : null;
                     return (
@@ -320,7 +333,7 @@ export default function StudentDashboard({ user, courses, onSelectCourse, onLogo
                           {done ? "✓" : c.icon}
                         </div>
                         <span style={{ flex: 1, fontSize: 13, color: done ? "var(--text)" : "var(--text-2)", fontWeight: done ? 700 : 400 }}>
-                          {c.full}
+                          {c.title}
                         </span>
                         {quiz && (
                           <Pill

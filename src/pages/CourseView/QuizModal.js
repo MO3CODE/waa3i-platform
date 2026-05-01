@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { saveQuizResult } from "../../data/db";
 import { toArabic } from "../../utils/helpers";
-import { Btn, Pill, ProgressBar } from "../../components/ui";
+import { Btn, ProgressBar } from "../../components/ui";
 
 export default function QuizModal({ quiz, user, course, onClose }) {
   const [phase,    setPhase]   = useState("intro");   // intro | quiz | result

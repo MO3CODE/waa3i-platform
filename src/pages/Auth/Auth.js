@@ -3,10 +3,12 @@
 // Login & Register page
 // ============================================================
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { login, register } from "../../data/db";
 import { Btn, Field } from "../../components/ui";
 
-export default function Auth({ onLogin, onBack }) {
+export default function Auth({ onLogin }) {
+  const navigate              = useNavigate();
   const [mode,    setMode]    = useState("login");
   const [form,    setForm]    = useState({ name: "", email: "", password: "" });
   const [error,   setError]   = useState("");
@@ -47,9 +49,7 @@ export default function Auth({ onLogin, onBack }) {
       <div className="auth-bg-radial" />
       <div className="auth-bg-grid"  />
 
-      {onBack && (
-        <button className="auth-back-btn" onClick={onBack}>← الرئيسية</button>
-      )}
+      <button className="auth-back-btn" onClick={() => navigate("/")}>← الرئيسية</button>
 
       <div className="auth-card anim-fade-up">
         {/* Logo */}

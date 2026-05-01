@@ -1,34 +1,51 @@
 // ============================================================
-// src/pages/CourseView/CourseView.js
+// src/pages/CourseView/CourseView.js — v2
+// يحمّل المادة والمحاضرات من Firestore + يستخدم courseId من URL
 // ============================================================
 import React, { useState, useEffect, useRef } from "react";
-import { getProgress, setLectureProgress, getQuizByCourse, getUserQuizResult, getNotes } from "../../data/db";
+import {
+  getCourse, getLectures,
+  getProgress, setLectureProgress,
+  getQuizByCourse, getUserQuizResult,
+  getNotes, getAllNotesCount,
+} from "../../data/db";
 import { toArabic, formatSeconds, countWatched, coursePct, isCourseComplete } from "../../utils/helpers";
 import { useYouTubePlayer } from "../../hooks/useYouTubePlayer";
 import { Ring, Btn, Glass, Pill, ProgressBar } from "../../components/ui";
 import NotesPanel from "./NotesPanel";
-import QuizModal from "./QuizModal";
+import QuizModal  from "./QuizModal";
 
-export default function CourseView({ user, course, onBack }) {
-  const [cp,        setCp]        = useState({});
-  const [quiz,      setQuiz]      = useState(null);
-  const [qResult,   setQResult]   = useState(null);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const [watchPct,  setWatchPct]  = useState(0);
-  const [curSec,    setCurSec]    = useState(0);
-  const [showQuiz,  setShowQuiz]  = useState(false);
-  const [quizKey,   setQuizKey]   = useState(0);
-  const [notePopup, setNotePopup] = useState(null);
-  const [ready,     setReady]     = useState(false);
+export default function CourseView({ user, courseId, onBack }) {
+  const [course,      setCourse]     = useState(null);
+  const [lectures,    setLectures]   = useState([]);
+  const [cp,          setCp]         = useState({});
+  const [quiz,        setQuiz]       = useState(null);
+  const [qResult,     setQResult]    = useState(null);
+  const [activeIdx,   setActiveIdx]  = useState(0);
+  const [watchPct,    setWatchPct]   = useState(0);
+  const [curSec,      setCurSec]     = useState(0);
+  const [showQuiz,    setShowQuiz]   = useState(false);
+  const [quizKey,     setQuizKey]    = useState(0);
+  const [notePopup,   setNotePopup]  = useState(null);
+  const [noteCounts,  setNoteCounts] = useState({});
+  const [ready,       setReady]      = useState(false);
   const shownNotes = useRef(new Set());
 
   useEffect(() => {
     async function load() {
-      const [prog, qz] = await Promise.all([
+      const [co, lects, prog, qz] = await Promise.all([
+        getCourse(courseId),
+        getLectures(courseId),
         getProgress(user.id),
-        getQuizByCourse(course.id),
+        getQuizByCourse(courseId),
       ]);
-      const saved = prog[course.id] || {};
+
+      if (!co) return;
+
+      setCourse(co);
+      setLectures(lects);
+
+      const saved = prog[courseId] || {};
       setCp(saved);
       setQuiz(qz);
 
@@ -39,60 +56,72 @@ export default function CourseView({ user, course, onBack }) {
 
       // Find first unwatched lecture
       let startIdx = 0;
-      for (let i = 0; i < course.lectures; i++) {
-        if ((saved[i] || 0) < 80) { startIdx = i; break; }
+      for (let i = 0; i < lects.length; i++) {
+        if ((saved[lects[i]?.id] || 0) < 80) { startIdx = i; break; }
       }
       setActiveIdx(startIdx);
-      setWatchPct(saved[startIdx] || 0);
+      setWatchPct(saved[lects[startIdx]?.id] || 0);
+
+      // Load note counts for sidebar badges
+      const counts = await getAllNotesCount(user.id, courseId);
+      setNoteCounts(counts);
+
       setReady(true);
     }
     load();
-  }, [user.id, course.id, course.lectures]);
+  }, [user.id, courseId]);
 
-  // Reset watch state on lecture change
-  useEffect(() => {
-    if (!ready) return;
-    setWatchPct(cp[activeIdx] || 0);
+  // Reset on lecture change — intentionally omits cp/lectures/ready
+  useEffect(() => { // eslint-disable-line react-hooks/exhaustive-deps
+    if (!ready || lectures.length === 0) return;
+    const lid = lectures[activeIdx]?.id;
+    setWatchPct(cp[lid] || 0);
     setCurSec(0);
     shownNotes.current = new Set();
-  }, [activeIdx]);
+  }, [activeIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalW   = countWatched(cp);
-  const totPct   = coursePct(cp, course.lectures);
-  const complete = isCourseComplete(cp, course.lectures);
-  const curPct   = Math.max(watchPct, cp[activeIdx] || 0);
+  const activeLecture = lectures[activeIdx];
+  const activeLecId   = activeLecture?.id;
+  const lectureCount  = lectures.length || course?.lectureCount || 0;
+  const totalW        = countWatched(cp);
+  const totPct        = coursePct(cp, lectureCount);
+  const complete      = isCourseComplete(cp, lectureCount);
+  const curPct        = Math.max(watchPct, cp[activeLecId] || 0);
 
   const { getCurrentTime, seekTo } = useYouTubePlayer(
     "yt-player-div",
-    course.playlistId,
-    activeIdx + 1,
+    course?.playlistId,
+    activeLecture ? activeLecture.playlistIndex : 1,
     {
       onProgress: pct => {
         setWatchPct(pct);
-        bumpProgress(activeIdx, pct);
-        try {
-          const sec = Math.floor(window._ytplayer?.getCurrentTime?.() || 0);
-          setCurSec(sec);
-          checkNotePopup(sec);
-        } catch {}
+        if (activeLecId) {
+          bumpProgress(activeLecId, pct);
+          try {
+            const sec = Math.floor(window._ytplayer?.getCurrentTime?.() || 0);
+            setCurSec(sec);
+            checkNotePopup(sec);
+          } catch {}
+        }
       },
-      onEnded: () => bumpProgress(activeIdx, 100),
+      onEnded: () => activeLecId && bumpProgress(activeLecId, 100),
     }
   );
 
-  function bumpProgress(idx, pct) {
-    setLectureProgress(user.id, course.id, idx, pct);
+  async function bumpProgress(lectId, pct) {
+    await setLectureProgress(user.id, courseId, lectId, pct);
     setCp(prev => {
       const updated = { ...prev };
-      if (pct > (updated[idx] || 0)) updated[idx] = pct;
+      if (pct > (updated[lectId] || 0)) updated[lectId] = pct;
       return updated;
     });
   }
 
-  function checkNotePopup(sec) {
-    const notes = getNotes(user.id, course.id, activeIdx);
+  async function checkNotePopup(sec) {
+    if (!activeLecId) return;
+    const notes = await getNotes(user.id, courseId, activeLecId);
     notes.forEach(note => {
-      if (Math.abs(note.sec - sec) <= 1 && !shownNotes.current.has(note.id)) {
+      if (Math.abs(note.timestamp - sec) <= 1 && !shownNotes.current.has(note.id)) {
         shownNotes.current.add(note.id);
         setNotePopup(note);
         setTimeout(() => setNotePopup(null), 5000);
@@ -106,7 +135,13 @@ export default function CourseView({ user, course, onBack }) {
     shownNotes.current = new Set();
   }
 
-  if (!ready) {
+  async function handleNoteAdded() {
+    if (!activeLecId) return;
+    const counts = await getAllNotesCount(user.id, courseId);
+    setNoteCounts(counts);
+  }
+
+  if (!ready || !course) {
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg)", flexDirection: "column", gap: 12 }}>
         <div style={{ fontSize: 32 }}>⏳</div>
@@ -129,7 +164,7 @@ export default function CourseView({ user, course, onBack }) {
         </button>
 
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)" }}>{course.full}</div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: "var(--text)" }}>{course.title}</div>
           <div style={{ fontSize: 11, color: "var(--text-3)" }}>{course.instructor}</div>
         </div>
 
@@ -157,7 +192,7 @@ export default function CourseView({ user, course, onBack }) {
           <span style={{ fontSize: 16, flexShrink: 0 }}>📌</span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 11, color: course.accent, fontWeight: 700, marginBottom: 4 }}>
-              ملاحظة عند {formatSeconds(notePopup.sec)}
+              ملاحظة عند {formatSeconds(notePopup.timestamp)}
             </div>
             <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>{notePopup.text}</div>
           </div>
@@ -178,7 +213,7 @@ export default function CourseView({ user, course, onBack }) {
           <Glass style={{ marginTop: 12, padding: "13px 18px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, alignItems: "center" }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>
-                المحاضرة {toArabic(activeIdx + 1)} / {toArabic(course.lectures)}
+                {activeLecture?.title || `المحاضرة ${toArabic(activeIdx + 1)}`}
               </span>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 {curSec > 0 && (
@@ -199,11 +234,12 @@ export default function CourseView({ user, course, onBack }) {
 
           <NotesPanel
             userId={user.id}
-            courseId={course.id}
-            lectureIdx={activeIdx}
+            courseId={courseId}
+            lectureId={activeLecId}
             accentColor={course.accent}
             getPlayerTime={getCurrentTime}
             seekTo={seekTo}
+            onNoteChange={handleNoteAdded}
           />
 
           {complete && (
@@ -229,20 +265,21 @@ export default function CourseView({ user, course, onBack }) {
           )}
         </div>
 
+        {/* ── Lectures sidebar ── */}
         <div className="course-sidebar">
           <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-2)", letterSpacing: ".04em" }}>
             قائمة المحاضرات
           </div>
 
           <Glass style={{ overflow: "hidden", maxHeight: "58vh", overflowY: "auto" }} hover={false}>
-            {Array.from({ length: course.lectures }, (_, i) => {
-              const p         = cp[i] || 0;
+            {lectures.map((lec, i) => {
+              const p         = cp[lec.id] || 0;
               const done      = p >= 80;
-              const noteCount = getNotes(user.id, course.id, i).length;
+              const noteCount = noteCounts[lec.id] || 0;
 
               return (
                 <div
-                  key={i}
+                  key={lec.id}
                   className={`lecture-item ${activeIdx === i ? "active" : ""}`}
                   style={{ "--accent": course.accent, background: activeIdx === i ? `${course.accent}10` : "" }}
                   onClick={() => goToLecture(i)}
@@ -266,8 +303,9 @@ export default function CourseView({ user, course, onBack }) {
                       fontSize: 12,
                       color: activeIdx === i ? course.accent : "var(--text-2)",
                       fontWeight: activeIdx === i ? 700 : 400,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
-                      المحاضرة {toArabic(i + 1)}
+                      {lec.title || `المحاضرة ${toArabic(i + 1)}`}
                     </div>
                     {p > 0 && p < 80 && <ProgressBar pct={p} color={course.accent} height={2} />}
                   </div>
@@ -290,7 +328,7 @@ export default function CourseView({ user, course, onBack }) {
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 7 }}>
               <span style={{ fontSize: 12, color: "var(--text-3)" }}>التقدم</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: course.accent }}>
-                {toArabic(totalW)}/{toArabic(course.lectures)}
+                {toArabic(totalW)}/{toArabic(lectureCount)}
               </span>
             </div>
             <ProgressBar pct={totPct} color={course.accent} height={5} />

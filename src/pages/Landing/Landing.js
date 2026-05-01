@@ -3,11 +3,14 @@
 // Public-facing landing page
 // ============================================================
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { COURSES, TOTAL_DAYS } from "../../data/courses";
 import { toArabic } from "../../utils/helpers";
 import { Btn, Glass, Pill } from "../../components/ui";
 
-export default function Landing({ onStart }) {
+export default function Landing() {
+  const navigate = useNavigate();
+  const onStart  = () => navigate("/auth");
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {

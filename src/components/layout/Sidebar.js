@@ -3,7 +3,6 @@
 // Reusable sidebar used by both Student and Admin dashboards
 // ============================================================
 import React from "react";
-import { Ring } from "../ui";
 
 export function Sidebar({ logo, user, navItems, activeTab, onTabChange, onLogout, headerExtra }) {
   return (
