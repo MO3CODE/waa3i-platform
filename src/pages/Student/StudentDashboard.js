@@ -23,6 +23,14 @@ export default function StudentDashboard({ user, onLogout }) {
   const [sessions, setSessions] = useState([]);
   const [quizzes,  setQuizzes]  = useState([]);
   const [loading,  setLoading]  = useState(true);
+  const [tick,     setTick]     = useState(0);
+
+  // Refresh data when returning to this page
+  useEffect(() => {
+    const onFocus = () => setTick(t => t + 1);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -45,7 +53,7 @@ export default function StudentDashboard({ user, onLogout }) {
       setLoading(false);
     }
     load();
-  }, [user.id, user.role]);
+  }, [user.id, user.role, tick]);
 
   function getQuizForCourse(courseId) {
     return quizzes.find(q => q.courseId === courseId) || null;

@@ -348,7 +348,20 @@ export default function CourseView({ user, courseId, onBack }) {
       </div>
 
       {showQuiz && quiz && (
-        <QuizModal key={quizKey} quiz={quiz} user={user} course={course} onClose={() => setShowQuiz(false)} />
+        <QuizModal
+          key={quizKey}
+          quiz={quiz}
+          user={user}
+          course={course}
+          onClose={async () => {
+            setShowQuiz(false);
+            // Refresh quiz result after modal closes
+            if (quiz) {
+              const qr = await getUserQuizResult(user.id, quiz.id);
+              setQResult(qr);
+            }
+          }}
+        />
       )}
     </div>
   );

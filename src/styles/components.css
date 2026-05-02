@@ -502,6 +502,20 @@
   gap: 0 16px;
 }
 
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field-group .field-label,
+.field-group label {
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
 .color-input {
   width: 48px;
   height: 36px;

@@ -7,7 +7,7 @@ import { getNotes, addNote, updateNote, deleteNote } from "../../data/db";
 import { toArabic, formatSeconds } from "../../utils/helpers";
 import { Glass, Btn, Pill } from "../../components/ui";
 
-export default function NotesPanel({ userId, courseId, lectureId, accentColor, getPlayerTime, seekTo }) {
+export default function NotesPanel({ userId, courseId, lectureId, accentColor, getPlayerTime, seekTo, onNoteChange }) {
   const [notes,    setNotes]    = useState([]);
   const [text,     setText]     = useState("");
   const [editId,   setEditId]   = useState(null);
@@ -32,6 +32,7 @@ export default function NotesPanel({ userId, courseId, lectureId, accentColor, g
     const note = await addNote({ userId, courseId, lectureId, timestamp, text: trimmed });
     setNotes(prev => [...prev, note].sort((a, b) => a.timestamp - b.timestamp));
     setText("");
+    onNoteChange?.();
   }
 
   function handleKeyDown(e) {
@@ -44,6 +45,7 @@ export default function NotesPanel({ userId, courseId, lectureId, accentColor, g
   async function handleDelete(noteId) {
     await deleteNote(noteId);
     setNotes(prev => prev.filter(n => n.id !== noteId));
+    onNoteChange?.();
   }
 
   function startEdit(note) {

@@ -33,7 +33,7 @@ export const coursePct = (courseProgress, totalLectures) =>
 
 /** Is the course fully complete? */
 export const isCourseComplete = (courseProgress, totalLectures) =>
-  countWatched(courseProgress) >= totalLectures;
+  totalLectures > 0 && countWatched(courseProgress) >= totalLectures;
 
 /** Notification type → colour */
 export const NOTIF_COLOR = {

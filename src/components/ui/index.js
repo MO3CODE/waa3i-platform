@@ -60,7 +60,7 @@ export function Pill({ children, color, bg }) {
 }
 
 // ── Modal ──────────────────────────────────────────────────
-export function Modal({ open, onClose, title, children, width = 560 }) {
+export function Modal({ open = true, onClose, title, children, width = 560 }) {
   if (!open) return null;
   return (
     <div

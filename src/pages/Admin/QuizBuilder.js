@@ -73,7 +73,7 @@ export default function QuizBuilder({ courses, initial, onSave, onCancel }) {
       {/* Meta fields */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
         <Field label="عنوان الاختبار *"  value={form.title}     onChange={set("title")}     placeholder="مثل: اختبار مادة الإيمان" />
-        <Picker label="المادة *"          value={form.courseId}  onChange={set("courseId")}  options={courses.map(c => ({ v: c.id, l: `${c.icon} ${c.full}` }))} />
+        <Picker label="المادة *"          value={form.courseId}  onChange={set("courseId")}  options={courses.map(c => ({ v: c.id, l: `${c.icon || "📚"} ${c.full || c.title}` }))} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
         <Field label="المدة (ثانية)"      value={String(form.timeLimit)} onChange={setNum("timeLimit")} type="number" />
