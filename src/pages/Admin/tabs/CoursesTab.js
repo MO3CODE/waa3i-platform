@@ -105,6 +105,17 @@ export default function CoursesTab() {
     setConfirmDelete(null);
   }
 
+  async function moveOrder(idx, dir) {
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= courses.length) return;
+    const updated = [...courses];
+    const aOrder  = updated[idx].order ?? idx;
+    const bOrder  = updated[swapIdx].order ?? swapIdx;
+    await saveCourse({ ...updated[idx],     id: updated[idx].id,     order: bOrder });
+    await saveCourse({ ...updated[swapIdx], id: updated[swapIdx].id, order: aOrder });
+    await loadCourses();
+  }
+
   const setCF = k => v => setCourseForm(p => ({ ...p, [k]: v }));
   const setLF = k => v => setLectureForm(p => ({ ...p, [k]: v }));
 
@@ -121,13 +132,19 @@ export default function CoursesTab() {
         </div>
 
         <div className="courses-list">
-          {courses.map(course => (
+          {courses.map((course, idx) => (
             <div
               key={course.id}
               className={`course-row ${activeCourse?.id === course.id ? "active" : ""}`}
               onClick={() => setActiveCourse(course)}
               style={{ borderRight: `3px solid ${course.accent || course.color || "var(--gold)"}` }}
             >
+              {/* Order arrows */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 4 }} onClick={e => e.stopPropagation()}>
+                <button className="icon-btn" style={{ fontSize: 10, padding: "2px 5px" }} disabled={idx === 0} onClick={() => moveOrder(idx, -1)}>▲</button>
+                <button className="icon-btn" style={{ fontSize: 10, padding: "2px 5px" }} disabled={idx === courses.length - 1} onClick={() => moveOrder(idx, 1)}>▼</button>
+              </div>
+
               <div className="course-row-info">
                 <span style={{ fontSize: 18, color: course.accent || course.color }}>{course.icon || "📚"}</span>
                 <div>
