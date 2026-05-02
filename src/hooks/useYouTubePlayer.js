@@ -13,9 +13,13 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
 
   cbRef.current = callbacks;
 
-  function createPlayer() {
+  function createPlayer(attempts = 0) {
     const container = document.getElementById(containerId);
-    if (!container || playerRef.current) return;
+    if (!container) {
+      if (attempts < 20) setTimeout(() => createPlayer(attempts + 1), 100);
+      return;
+    }
+    if (playerRef.current) return;
     container.innerHTML = "";
 
     playerRef.current = new window.YT.Player(containerId, {
