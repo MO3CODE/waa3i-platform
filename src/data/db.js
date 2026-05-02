@@ -106,9 +106,15 @@ export async function seedAdminUser() {
   const ADMIN_EMAIL    = "admin@waa3i.org";
   const ADMIN_PASSWORD = "admin123";
   try {
-    // Check Firestore first to avoid unnecessary Auth request
+    // If user exists in Firestore, make sure role is superadmin
     const snap = await getDocs(query(col("users"), where("email", "==", ADMIN_EMAIL)));
-    if (!snap.empty) return;
+    if (!snap.empty) {
+      const d = snap.docs[0];
+      if (d.data().role !== ROLES.SUPERADMIN) {
+        await updateDoc(d.ref, { role: ROLES.SUPERADMIN });
+      }
+      return;
+    }
 
     const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
     await setDoc(ref("users", cred.user.uid), {
