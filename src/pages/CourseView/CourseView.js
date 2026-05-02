@@ -104,7 +104,18 @@ export default function CourseView({ user, courseId, onBack }) {
           } catch {}
         }
       },
-      onEnded: () => activeLecId && bumpProgress(activeLecId, 100),
+      onEnded: () => {
+        if (activeLecId) bumpProgress(activeLecId, 100);
+        // Auto-advance to next lecture
+        setActiveIdx(prev => {
+          const next = prev + 1;
+          return next < lectures.length ? next : prev;
+        });
+      },
+      onPlaylistReady: count => {
+        // Trim lectures list to actual playlist size
+        setLectures(prev => prev.length > count ? prev.slice(0, count) : prev);
+      },
     }
   );
 

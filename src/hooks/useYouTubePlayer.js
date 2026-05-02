@@ -22,7 +22,6 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
       playerVars: {
         list:           playlistId,
         listType:       "playlist",
-        // No index — let YouTube start from first embeddable video
         enablejsapi:    1,
         origin:         window.location.origin,
         rel:            0,
@@ -33,11 +32,19 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
       events: {
         onReady: () => {
           readyRef.current = true;
+
           // Fix iframe CSS
           try {
             const f = playerRef.current.getIframe();
             if (f) f.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
           } catch {}
+
+          // Report actual playlist size so UI can match
+          try {
+            const list = playerRef.current.getPlaylist();
+            if (list?.length) cbRef.current?.onPlaylistReady?.(list.length);
+          } catch {}
+
           // Navigate to requested lecture
           const idx = (pendingIdx.current || 1) - 1;
           if (idx > 0) {
@@ -68,7 +75,6 @@ export function useYouTubePlayer(containerId, playlistId, videoIndex, callbacks)
     });
   }
 
-  // Build player once
   useEffect(() => {
     if (!playlistId) return;
 

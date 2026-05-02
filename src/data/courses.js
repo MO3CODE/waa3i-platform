@@ -9,7 +9,7 @@ export const COURSES = [
     title:       "الإيمان",
     full:        "مادة الإيمان",
     instructor:  "د. هيثم طلعت",
-    lectures:    15,
+    lectures:    10,
     days:        8,
     duration:    "٥–٨ دقائق",
     color:       "#2E7D52",

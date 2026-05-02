@@ -35,7 +35,7 @@ export default function StudentDashboard({ user, onLogout }) {
         getLiveSessions(),
         getQuizzes(),
       ]);
-      setCourses(co);
+      setCourses(co.filter(c => c.isActive !== false));
       setProgress(prog);
       setNotifs(nfs);
       setQResults(qrs);
