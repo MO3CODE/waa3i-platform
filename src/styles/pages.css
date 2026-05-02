@@ -211,7 +211,7 @@
 .features-section { padding: 80px 20px; }
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
 }
 
